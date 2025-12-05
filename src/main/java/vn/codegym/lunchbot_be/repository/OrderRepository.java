@@ -1,0 +1,54 @@
+package vn.codegym.lunchbot_be.repository;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import vn.codegym.lunchbot_be.model.Order;
+import vn.codegym.lunchbot_be.model.enums.OrderStatus;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Repository
+public interface OrderRepository extends JpaRepository<Order, Long> {
+    List<Order> findByUserId(Long userId);
+    Page<Order> findByUserId(Long userId, Pageable pageable);
+
+    List<Order> findByMerchantId(Long merchantId);
+    Page<Order> findByMerchantId(Long merchantId, Pageable pageable);
+
+    List<Order> findByStatus(OrderStatus status);
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
+
+    List<Order> findByUserIdAndStatus(Long userId, OrderStatus status);
+    List<Order> findByMerchantIdAndStatus(Long merchantId, OrderStatus status);
+
+    @Query("SELECT o FROM Order o WHERE o.orderNumber LIKE %:keyword% " +
+            "OR o.user.email LIKE %:keyword% OR o.user.phone LIKE %:keyword%")
+    List<Order> searchOrders(@Param("keyword") String keyword);
+
+    @Query("SELECT COUNT(o), o.status FROM Order o WHERE o.merchant.id = :merchantId GROUP BY o.status")
+    List<Object[]> countOrdersByStatus(@Param("merchantId") Long merchantId);
+
+    @Query("SELECT SUM(o.totalAmount) FROM Order o WHERE o.merchant.id = :merchantId " +
+            "AND MONTH(o.orderDate) = :month AND YEAR(o.orderDate) = :year")
+    BigDecimal getMonthlyRevenue(@Param("merchantId") Long merchantId,
+                                 @Param("month") int month,
+                                 @Param("year") int year);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.merchant.id = :merchantId " +
+            "AND DATE(o.orderDate) = CURRENT_DATE")
+    Long getTodayOrderCount(@Param("merchantId") Long merchantId);
+
+    @Query("SELECT SUM(o.totalAmount) FROM Order o WHERE o.merchant.id = :merchantId " +
+            "AND DATE(o.orderDate) = CURRENT_DATE")
+    BigDecimal getTodayRevenue(@Param("merchantId") Long merchantId);
+
+    @Query("SELECT o FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate")
+    List<Order> findOrdersBetweenDates(@Param("startDate") LocalDateTime startDate,
+                                       @Param("endDate") LocalDateTime endDate);
+}
