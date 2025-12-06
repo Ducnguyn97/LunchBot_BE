@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.codegym.lunchbot_be.dto.MerchantRegisterRequest;
+import vn.codegym.lunchbot_be.dto.request.RegistrationRequest;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.service.AuthService;
 
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
     @Autowired
     private AuthService authService;
 
@@ -45,6 +47,34 @@ public class AuthController {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             // Xử lý các lỗi khác
+            return ResponseEntity.internalServerError().body("Đăng ký thất bại do lỗi hệ thống.");
+        }
+    }
+
+    @PostMapping("/register") // Hoặc /register/user
+    public ResponseEntity<?> registerUser(@Valid @RequestBody RegistrationRequest request,
+                                          BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            // Xử lý lỗi validation DTO (giống như Merchant)
+            String errorMsg = bindingResult.getAllErrors().stream()
+                    .map(error -> error.getDefaultMessage())
+                    .collect(Collectors.joining(", "));
+
+            return ResponseEntity.badRequest().body("Lỗi dữ liệu đầu vào: " + errorMsg);
+        }
+        try {
+            // Gọi phương thức service đăng ký USER thường
+            authService.registerUser(request);
+
+            return ResponseEntity.ok("Đăng ký tài khoản thành công! Vui lòng kiểm tra email.");
+
+        } catch (IllegalArgumentException e) {
+            // Bắt lỗi nghiệp vụ: Mật khẩu không khớp
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            // Bắt lỗi nghiệp vụ: Email đã tồn tại (nếu Service ném ra IllegalStateException)
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage()); // 409 Conflict
+        } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Đăng ký thất bại do lỗi hệ thống.");
         }
     }

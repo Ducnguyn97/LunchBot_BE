@@ -38,16 +38,32 @@ public class EmailService {
     // ----------------------------------------------------------------------
     // PHƯƠNG THỨC GỬI EMAIL HTML (SỬ DỤNG MIME MESSAGE)
     // ----------------------------------------------------------------------
-    public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl) {
+    public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant) {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
 
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
             helper.setTo(to);
-            helper.setSubject("🎉 Đăng Ký Merchant Thành Công trên LunchBot");
 
-            String htmlContent = buildHtmlContent(to, fullName, restaurantName, loginUrl);
+            // 1. Đặt Subject dựa trên vai trò
+            String subject = isMerchant
+                    ? "🎉 Đăng Ký Merchant Thành Công trên LunchBot"
+                    : "👋 Chào Mừng Đến Với LunchBot!";
+            helper.setSubject(subject);
+
+            // 2. CHỌN TEMPLATE PHÙ HỢP
+            String templatePath = isMerchant
+                    ? "classpath:templates/emails/merchant_registration_template.html"
+                    : "classpath:templates/emails/user_registration_template.html"; // Template mới
+
+            String htmlContent = buildHtmlContent(
+                    templatePath, // <--- THAM SỐ MỚI ĐÃ ĐƯỢC BỔ SUNG
+                    to,
+                    fullName,
+                    restaurantName,
+                    loginUrl
+            );
 
             helper.setText(htmlContent, true);
 
@@ -63,13 +79,16 @@ public class EmailService {
     // ----------------------------------------------------------------------
     // HÀM XÂY DỰNG NỘI DUNG HTML
     // ----------------------------------------------------------------------
-    private String buildHtmlContent(String email, String fullName, String restaurantName, String loginUrl) {
-        String template = readTemplateFile("classpath:templates/emails/registration_success_template.html");
+    private String buildHtmlContent(String templatePath, String email, String fullName, String restaurantName, String loginUrl) {
+        String template = readTemplateFile(templatePath); // Giờ đã sử dụng templatePath
+
+        String safeFullName = fullName != null ? fullName : email;
+        String safeRestaurantName = restaurantName != null ? restaurantName : "";
 
         // Thay thế các biến động
         return template
-                .replace("${fullName}", fullName != null ? fullName : email)
-                .replace("${restaurantName}", restaurantName)
+                .replace("${fullName}", safeFullName)
+                .replace("${restaurantName}", safeRestaurantName)
                 .replace("${email}", email)
                 .replace("${loginUrl}", loginUrl)
                 .replace("${currentYear}", String.valueOf(Year.now().getValue()));
