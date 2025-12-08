@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.codegym.lunchbot_be.dto.request.MerchantRegisterRequest;
+import vn.codegym.lunchbot_be.dto.response.AuthResponse;
+import vn.codegym.lunchbot_be.dto.request.LoginRequest;
+import vn.codegym.lunchbot_be.dto.request.RegistrationRequest;
 import vn.codegym.lunchbot_be.service.impl.AuthService;
 
 import java.util.stream.Collectors;
@@ -37,5 +40,11 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Đăng ký thất bại do lỗi hệ thống.");
         }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        AuthResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
     }
 }
