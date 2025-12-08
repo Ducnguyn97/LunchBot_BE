@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import vn.codegym.lunchbot_be.dto.MerchantRegisterRequest;
+import vn.codegym.lunchbot_be.dto.request.RegistrationRequest;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.model.User;
 import vn.codegym.lunchbot_be.model.enums.UserRole;
@@ -63,11 +64,23 @@ public class AuthService {
 
 
         try {
-            String subject = "Đăng ký Merchant thành công!";
-            String body = String.format("Chào mừng bạn %s, bạn đã đăng ký thành công làm Merchant. Thông tin nhà hàng: %s",
-                    request.getEmail(), merchant.getRestaurantName());
-            emailService.sendRegistrationSuccessEmail(user.getEmail(), null, merchant.getRestaurantName(),
-                    "http://localhost:5173/register-merchant"); // Thay URL đăng nhập thực tế
+            // Khắc phục lỗi: Đảm bảo fullName KHÔNG NULL
+            String recipientName = user.getFullName() != null
+                    ? user.getFullName()
+                    : user.getEmail();
+
+            // Khắc phục lỗi: Đảm bảo restaurantName KHÔNG NULL
+            String merchantName = merchant.getRestaurantName() != null
+                    ? merchant.getRestaurantName()
+                    : ""; // Sử dụng chuỗi rỗng nếu tên nhà hàng là null
+
+            emailService.sendRegistrationSuccessEmail(
+                    user.getEmail(),
+                    recipientName,
+                    merchantName, // <--- SỬ DỤNG GIÁ TRỊ ĐÃ KHẮC PHỤC
+                    "http://localhost:5173/register-merchant",
+                    true
+            );
 
         } catch (Exception e) {
             // Xử lý lỗi gửi email (ví dụ: log lỗi)
@@ -76,4 +89,54 @@ public class AuthService {
 
         return user;
     }
+
+    @Transactional
+    public User registerUser(RegistrationRequest request) {
+        // 1. Kiểm tra Mật khẩu và Xác nhận Mật khẩu
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Mật khẩu và xác nhận mật khẩu không khớp.");
+        }
+
+        // 2. Kiểm tra Email đã tồn tại
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new IllegalStateException("Email đã được đăng ký. Vui lòng sử dụng email khác.");
+        }
+
+        // 3. Tạo User Entity
+        User newUser = User.builder()
+                .email(request.getEmail())
+                .fullName(request.getName())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .role(UserRole.USER) // Đảm bảo role là USER
+                .isActive(true)
+                .isEmailVerified(false)
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+
+        // 4. Gửi Email thông báo (Theo yêu cầu của Task)
+        try {
+            // 1. Đảm bảo tên người nhận KHÔNG NULL
+            String recipientName = savedUser.getFullName() != null
+                    ? savedUser.getFullName()
+                    : savedUser.getEmail();
+
+            // 2. Đảm bảo MerchantName KHÔNG NULL (vì User thường không có MerchantName)
+            // Lỗi xảy ra là do tham số này!
+            String merchantName = ""; // <--- SỬ DỤNG CHUỖI RỖNG AN TOÀN
+
+            emailService.sendRegistrationSuccessEmail(
+                    savedUser.getEmail(),
+                    recipientName,
+                    merchantName,  // <--- ĐÃ THAY NULL BẰNG CHUỖI RỖNG
+                    "http://localhost:5173/register",
+                    false
+            );
+        } catch (Exception e) {
+            System.err.println("Lỗi gửi email: " + e.getMessage());
+        }
+
+        return savedUser;
+    }
+
 }
