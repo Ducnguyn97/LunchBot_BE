@@ -9,6 +9,7 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileCopyUtils;
 
@@ -25,19 +26,16 @@ import java.util.logging.Logger;
 @RequiredArgsConstructor
 public class EmailService {
 
-    // Lưu ý: @RequiredArgsConstructor sẽ tự động inject qua constructor
-    // nhưng bạn vẫn có thể giữ @Autowired ở đây
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
 
-    @Autowired
-    private ResourceLoader resourceLoader;
+    private final ResourceLoader resourceLoader;
 
     private static final Logger LOGGER = Logger.getLogger(EmailService.class.getName());
 
     // ----------------------------------------------------------------------
     // PHƯƠNG THỨC GỬI EMAIL HTML (SỬ DỤNG MIME MESSAGE)
     // ----------------------------------------------------------------------
+    @Async
     public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant) {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
 
@@ -58,7 +56,7 @@ public class EmailService {
                     : "classpath:templates/emails/user_registration_template.html"; // Template mới
 
             String htmlContent = buildHtmlContent(
-                    templatePath, // <--- THAM SỐ MỚI ĐÃ ĐƯỢC BỔ SUNG
+                    templatePath,
                     to,
                     fullName,
                     restaurantName,

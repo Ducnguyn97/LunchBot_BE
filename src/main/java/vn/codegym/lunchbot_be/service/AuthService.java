@@ -3,31 +3,34 @@ package vn.codegym.lunchbot_be.service;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import vn.codegym.lunchbot_be.dto.MerchantRegisterRequest;
+import vn.codegym.lunchbot_be.dto.request.MerchantRegisterRequest;
+import vn.codegym.lunchbot_be.dto.response.AuthResponse;
+import vn.codegym.lunchbot_be.dto.request.LoginRequest;
 import vn.codegym.lunchbot_be.dto.request.RegistrationRequest;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.model.User;
 import vn.codegym.lunchbot_be.model.enums.UserRole;
 import vn.codegym.lunchbot_be.repository.MerchantRepository;
 import vn.codegym.lunchbot_be.repository.UserRepository;
+import vn.codegym.lunchbot_be.util.JwtUtil;
 
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    @Autowired
-    private UserRepository userRepository;
 
-    @Autowired
-    private MerchantRepository merchantRepository;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final MerchantRepository merchantRepository;
 
-    @Autowired
-    private EmailService emailService; // Cần tạo EmailService
+    private final PasswordEncoder passwordEncoder;
+
+    private final EmailService emailService; // Cần tạo EmailService
+
+    private final JwtUtil jwtUtil;
 
     @Transactional
     public User registerMerchant(MerchantRegisterRequest request) {
@@ -138,5 +141,36 @@ public class AuthService {
 
         return savedUser;
     }
+
+    public AuthResponse login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadCredentialsException("Email hoặc mật khẩu không đúng"));
+
+        // Kiểm tra password
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng");
+        }
+
+        // Kiểm tra tài khoản có active không
+        if (!user.getIsActive()) {
+            throw new RuntimeException("Tài khoản đã bị vô hiệu hóa");
+        }
+
+        // Tạo JWT token
+        String token = jwtUtil.generateToken(
+                user.getEmail(),
+                user.getRole().name(),
+                user.getId()
+        );
+
+        return AuthResponse.builder()
+                .token(token)
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .role(user.getRole().name())
+                .userId(user.getId())
+                .build();
+    }
+
 
 }
