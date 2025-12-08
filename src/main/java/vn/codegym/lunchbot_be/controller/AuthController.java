@@ -14,7 +14,7 @@ import vn.codegym.lunchbot_be.dto.request.MerchantRegisterRequest;
 import vn.codegym.lunchbot_be.dto.response.AuthResponse;
 import vn.codegym.lunchbot_be.dto.request.LoginRequest;
 import vn.codegym.lunchbot_be.dto.request.RegistrationRequest;
-import vn.codegym.lunchbot_be.service.impl.AuthService;
+import vn.codegym.lunchbot_be.service.impl.AuthServiceImpl;
 
 import java.util.stream.Collectors;
 
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthService authService;
+    private final AuthServiceImpl authService;
 
     @PostMapping("/register/merchant")
     public ResponseEntity<?> registerMerchant(@Valid @RequestBody MerchantRegisterRequest request,
