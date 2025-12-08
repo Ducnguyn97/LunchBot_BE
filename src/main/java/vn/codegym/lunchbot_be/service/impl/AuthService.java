@@ -84,6 +84,11 @@ public class AuthService {
                     "http://localhost:5173/register-merchant",
                     true
             );
+            String subject = "Đăng ký Merchant thành công!";
+            String body = String.format("Chào mừng bạn %s, bạn đã đăng ký thành công làm Merchant. Thông tin nhà hàng: %s",
+                    request.getEmail(), merchant.getRestaurantName());
+            emailService.sendRegistrationSuccessEmail(user.getEmail(), null, merchant.getRestaurantName(),
+                    "http://localhost:5173/register-merchant"); // Thay URL đăng nhập thực tế
 
         } catch (Exception e) {
             // Xử lý lỗi gửi email (ví dụ: log lỗi)

@@ -142,11 +142,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/merchant-approval", context);
+
             sendHtmlEmail(merchantEmail,
                     "🎉 Chúc mừng! Tài khoản merchant của bạn đã được phê duyệt",
                     htmlContent);
+
             log.info("Merchant approval email sent successfully to: {}", merchantEmail);
+
         } catch (Exception e) {
             log.error("Failed to send merchant approval email to {}: {}", merchantEmail, e.getMessage(), e);
             // Fallback to simple email
@@ -165,11 +169,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/merchant-rejection", context);
+
             sendHtmlEmail(merchantEmail,
                     "❌ Thông báo về việc xét duyệt tài khoản merchant",
                     htmlContent);
+
             log.info("Merchant rejection email sent successfully to: {}", merchantEmail);
+
         } catch (Exception e) {
             log.error("Failed to send merchant rejection email to {}: {}", merchantEmail, e.getMessage(), e);
             // Fallback to simple email
@@ -187,11 +195,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appName", appName);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/merchant-locked", context);
+
             sendHtmlEmail(merchantEmail,
                     "🚫 Thông báo khóa tài khoản merchant",
                     htmlContent);
+
             log.info("Merchant locked email sent successfully to: {}", merchantEmail);
+
         } catch (Exception e) {
             log.error("Failed to send merchant locked email to {}: {}", merchantEmail, e.getMessage(), e);
             // Fallback to simple email
@@ -210,11 +222,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/merchant-unlocked", context);
+
             sendHtmlEmail(merchantEmail,
                     "✅ Thông báo mở khóa tài khoản merchant",
                     htmlContent);
+
             log.info("Merchant unlocked email sent successfully to: {}", merchantEmail);
+
         } catch (Exception e) {
             log.error("Failed to send merchant unlocked email to {}: {}", merchantEmail, e.getMessage(), e);
             // Fallback to simple email
@@ -230,14 +246,19 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appName", appName);
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
+
             String htmlContent = templateEngine.process("emails/welcome", context);
+
             sendHtmlEmail(userEmail,
                     "🎉 Chào mừng bạn đến với " + appName,
                     htmlContent);
+
             log.info("Welcome email sent successfully to: {}", userEmail);
+
         } catch (Exception e) {
             log.error("Failed to send welcome email to {}: {}", userEmail, e.getMessage(), e);
         }
+
     }
 
     @Override
@@ -248,11 +269,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("resetLink", appUrl + "/reset-password?token=" + resetToken);
             context.setVariable("appName", appName);
             context.setVariable("supportEmail", supportEmail);
+
             String htmlContent = templateEngine.process("emails/password-reset", context);
+
             sendHtmlEmail(userEmail,
                     "🔐 Yêu cầu đặt lại mật khẩu",
                     htmlContent);
+
             log.info("Password reset email sent successfully to: {}", userEmail);
+
         } catch (Exception e) {
             log.error("Failed to send password reset email to {}: {}", userEmail, e.getMessage(), e);
         }
@@ -268,11 +293,15 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/order-confirmation", context);
+
             sendHtmlEmail(userEmail,
                     "📦 Xác nhận đơn hàng từ " + appName,
                     htmlContent);
+
             log.info("Order confirmation email sent successfully to: {}", userEmail);
+
         } catch (Exception e) {
             log.error("Failed to send order confirmation email to {}: {}", userEmail, e.getMessage(), e);
         }
@@ -289,26 +318,30 @@ public class EmailServiceImpl implements EmailService {
             context.setVariable("appUrl", appUrl);
             context.setVariable("supportEmail", supportEmail);
             context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
             String htmlContent = templateEngine.process("emails/order-status-update", context);
+
             sendHtmlEmail(userEmail,
                     "📮 Cập nhật trạng thái đơn hàng",
                     htmlContent);
+
             log.info("Order status update email sent successfully to: {}", userEmail);
+
         } catch (Exception e) {
             log.error("Failed to send order status update email to {}: {}", userEmail, e.getMessage(), e);
         }
     }
-
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
         helper.setFrom(fromEmail);
         helper.setTo(to);
         helper.setSubject(subject);
         helper.setText(htmlContent, true);
+
         mailSender.send(message);
     }
-
     private void sendSimpleMerchantApprovalEmail(String merchantEmail, String merchantName, String restaurantName, String reason) {
         String subject = "🎉 Chúc mừng! Tài khoản merchant của bạn đã được phê duyệt";
         String content = String.format(
@@ -321,9 +354,9 @@ public class EmailServiceImpl implements EmailService {
                         "Email hỗ trợ: %s",
                 merchantName, restaurantName, reason, appName, supportEmail
         );
+
         sendSimpleEmail(merchantEmail, subject, content);
     }
-
     private void sendSimpleEmail(String to, String subject, String text) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -331,12 +364,12 @@ public class EmailServiceImpl implements EmailService {
             message.setTo(to);
             message.setSubject(subject);
             message.setText(text);
+
             mailSender.send(message);
         } catch (MailException e) {
             log.error("Failed to send simple email to {}: {}", to, e.getMessage(), e);
         }
     }
-
     private void sendSimpleMerchantRejectionEmail(String merchantEmail, String merchantName, String restaurantName, String reason) {
         String subject = "❌ Thông báo về việc xét duyệt tài khoản merchant";
         String content = String.format(
@@ -350,9 +383,9 @@ public class EmailServiceImpl implements EmailService {
                         "Email hỗ trợ: %s",
                 merchantName, restaurantName, reason, appName, supportEmail
         );
+
         sendSimpleEmail(merchantEmail, subject, content);
     }
-
     private void sendSimpleMerchantLockedEmail(String merchantEmail, String merchantName, String restaurantName, String reason) {
         String subject = "🚫 Thông báo khóa tài khoản merchant";
         String content = String.format(
@@ -365,9 +398,9 @@ public class EmailServiceImpl implements EmailService {
                         "Email hỗ trợ: %s",
                 merchantName, restaurantName, reason, appName, supportEmail
         );
+
         sendSimpleEmail(merchantEmail, subject, content);
     }
-
     private void sendSimpleMerchantUnlockedEmail(String merchantEmail, String merchantName, String restaurantName, String reason) {
         String subject = "✅ Thông báo mở khóa tài khoản merchant";
         String content = String.format(
@@ -380,6 +413,7 @@ public class EmailServiceImpl implements EmailService {
                         "Email hỗ trợ: %s",
                 merchantName, restaurantName, reason, appName, supportEmail
         );
+
         sendSimpleEmail(merchantEmail, subject, content);
     }
 }
