@@ -21,4 +21,6 @@ public interface EmailService {
     void sendOrderConfirmationEmail(String userEmail, String userName, String orderDetails);
 
     void sendOrderStatusUpdateEmail(String userEmail, String userName, String orderStatus, String orderDetails);
+
+    void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant);
 }

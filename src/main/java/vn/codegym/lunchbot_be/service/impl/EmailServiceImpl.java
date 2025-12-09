@@ -12,6 +12,7 @@ import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileCopyUtils;
 import org.thymeleaf.TemplateEngine;
@@ -28,11 +29,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailServiceImpl implements EmailService {
+
     private final TemplateEngine templateEngine;
 
     @Value("${app.mail.from:noreply@lunchbot.com}")
@@ -46,30 +47,44 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.url:http://localhost:3000}")
     private String appUrl;
-
     // Lưu ý: @RequiredArgsConstructor sẽ tự động inject qua constructor
     // nhưng bạn vẫn có thể giữ @Autowired ở đây
     @Autowired
     private JavaMailSender mailSender;
-
     @Autowired
     private ResourceLoader resourceLoader;
-
     private static final Logger LOGGER = Logger.getLogger(EmailServiceImpl.class.getName());
 
     // ----------------------------------------------------------------------
     // PHƯƠNG THỨC GỬI EMAIL HTML (SỬ DỤNG MIME MESSAGE)
     // ----------------------------------------------------------------------
-    public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl) {
+    @Async
+    public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant) {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
 
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
             helper.setTo(to);
-            helper.setSubject("🎉 Đăng Ký Merchant Thành Công trên LunchBot");
 
-            String htmlContent = buildHtmlContent(to, fullName, restaurantName, loginUrl);
+            // 1. Đặt Subject dựa trên vai trò
+            String subject = isMerchant
+                    ? "🎉 Đăng Ký Merchant Thành Công trên LunchBot"
+                    : "👋 Chào Mừng Đến Với LunchBot!";
+            helper.setSubject(subject);
+
+            // 2. CHỌN TEMPLATE PHÙ HỢP
+            String templatePath = isMerchant
+                    ? "classpath:templates/emails/merchant_registration_template.html"
+                    : "classpath:templates/emails/user_registration_template.html"; // Template mới
+
+            String htmlContent = buildHtmlContent(
+                    templatePath,
+                    to,
+                    fullName,
+                    restaurantName,
+                    loginUrl
+            );
 
             helper.setText(htmlContent, true);
 
@@ -85,13 +100,16 @@ public class EmailServiceImpl implements EmailService {
     // ----------------------------------------------------------------------
     // HÀM XÂY DỰNG NỘI DUNG HTML
     // ----------------------------------------------------------------------
-    private String buildHtmlContent(String email, String fullName, String restaurantName, String loginUrl) {
-        String template = readTemplateFile("classpath:templates/emails/registration_success_template.html");
+    private String buildHtmlContent(String templatePath, String email, String fullName, String restaurantName, String loginUrl) {
+        String template = readTemplateFile(templatePath); // Giờ đã sử dụng templatePath
+
+        String safeFullName = fullName != null ? fullName : email;
+        String safeRestaurantName = restaurantName != null ? restaurantName : "";
 
         // Thay thế các biến động
         return template
-                .replace("${fullName}", fullName != null ? fullName : email)
-                .replace("${restaurantName}", restaurantName)
+                .replace("${fullName}", safeFullName)
+                .replace("${restaurantName}", safeRestaurantName)
                 .replace("${email}", email)
                 .replace("${loginUrl}", loginUrl)
                 .replace("${currentYear}", String.valueOf(Year.now().getValue()));
@@ -112,7 +130,6 @@ public class EmailServiceImpl implements EmailService {
             return "<h1>Lỗi: Không tìm thấy template email.</h1>";
         }
     }
-
 
     @Override
     public void sendMerchantApprovalEmail(String merchantEmail, String merchantName, String restaurantName, String reason) {
