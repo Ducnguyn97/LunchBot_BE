@@ -23,7 +23,6 @@ import vn.codegym.lunchbot_be.repository.UserRepository;
 import vn.codegym.lunchbot_be.service.EmailService;
 import vn.codegym.lunchbot_be.util.JwtUtil;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 
@@ -50,23 +49,18 @@ public class AuthServiceImpl {
             throw new RuntimeException("Email đã được sử dụng.");
         }
 
+        // 2. Tạo User mới
         User user = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .phone(request.getPhone())
                 .role(UserRole.MERCHANT)
-                .isActive(false)
-                .isEmailVerified(false)// ⭐ Mặc định là FALSE, chờ xác nhận email
+                .isActive(true)
+                .isEmailVerified(false)
                 .build();
 
-        // 2. Tạo User mới
-        String confirmationToken = UUID.randomUUID().toString();
-        LocalDateTime expiryDate = LocalDateTime.now().plusHours(24); // Hạn token 24h
+        user = userRepository.save(user);
 
-        user.setConfirmationToken(confirmationToken);
-        user.setTokenExpiryDate(expiryDate);
-
-        User savedUser = userRepository.save(user);
 
         Merchant merchant = Merchant.builder()
                 .restaurantName(request.getRestaurantName() != null && !request.getRestaurantName().isEmpty()
@@ -98,10 +92,12 @@ public class AuthServiceImpl {
                     ? merchant.getRestaurantName()
                     : "";
 
-            emailService.sendRegistrationConfirmationEmail(
-                    savedUser.getEmail(),
-                    savedUser.getFullName() != null ? savedUser.getFullName() : savedUser.getEmail(),
-                    confirmationToken //
+            emailService.sendRegistrationSuccessEmail(
+                    user.getEmail(),
+                    recipientName,
+                    merchantName,
+                    "http://localhost:5173/login",
+                    true
             );
 
 
@@ -125,31 +121,33 @@ public class AuthServiceImpl {
             throw new IllegalStateException("Email đã được đăng ký. Vui lòng sử dụng email khác.");
         }
 
-        // 3. Tạo User Entity
-        User user = User.builder()
+        String token = UUID.randomUUID().toString();
+
+        User newUser = User.builder()
                 .email(request.getEmail())
                 .fullName(request.getName())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(UserRole.USER)
-                .isActive(false) // ⭐ Mặc định là FALSE, chờ xác nhận email
+                .isActive(false) // <<< Đảm bảo là FALSE
                 .isEmailVerified(false)
+                .verificationToken(token) // LƯU TOKEN VÀO USER
                 .build();
 
-        // ⭐ TẠO TOKEN VÀ THỜI GIAN HẾT HẠN
-        String confirmationToken = UUID.randomUUID().toString();
-        LocalDateTime expiryDate = LocalDateTime.now().plusHours(24); // Hạn token 24h
+        User savedUser = userRepository.save(newUser);
 
-        user.setConfirmationToken(confirmationToken);
-        user.setTokenExpiryDate(expiryDate);
-
-        User savedUser = userRepository.save(user);
-
-        // 4. Gửi Email thông báo (Theo yêu cầu của Task)
+        // 4. Gửi Email thông báo (Đã tích hợp: chỉ gửi email kích hoạt)
         try {
-            emailService.sendRegistrationConfirmationEmail(
+            String recipientName = savedUser.getFullName() != null
+                    ? savedUser.getFullName()
+                    : savedUser.getEmail();
+
+            // XÓA BỎ LỜI GỌI sendRegistrationSuccessEmail()
+
+            // CHỈ GIỮ LẠI LỜI GỌI GỬI EMAIL KÍCH HOẠT (Đây là email duy nhất được gửi)
+            emailService.sendVerificationEmail(
                     savedUser.getEmail(),
-                    savedUser.getFullName() != null ? savedUser.getFullName() : savedUser.getEmail(),
-                    confirmationToken // ⭐ TRUYỀN TOKEN ĐI
+                    recipientName,
+                    token
             );
         } catch (Exception e) {
             System.err.println("Lỗi gửi email: " + e.getMessage());
@@ -157,8 +155,6 @@ public class AuthServiceImpl {
 
         return savedUser;
     }
-
-    // Trong AuthServiceImpl.java (Sửa phương thức login)
 
     public AuthResponse login(LoginRequest request) {
 
@@ -180,7 +176,12 @@ public class AuthServiceImpl {
         // Lấy lại User object từ DB để lấy các thông tin khác (Merchant, Role...)
         // Hoặc sử dụng method getUserByEmail của CustomUserDetailsService nếu bạn có
         User user = userRepository.findByEmail(springUser.getUsername())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found after successful authentication"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found..."));
+
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            // Sử dụng BadCredentialsException hoặc một custom Exception để ngăn đăng nhập
+            throw new BadCredentialsException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email.");
+        }
 
         // Tạo JWT token
         String token = jwtUtil.generateToken(
@@ -197,28 +198,26 @@ public class AuthServiceImpl {
                 .userId(user.getId())
                 .build();
     }
+
     @Transactional
-    public void confirmRegistration(String token) {
-        User user = userRepository.findByConfirmationToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Mã xác nhận không hợp lệ hoặc không tồn tại."));
+    public User verifyAccount(String token) {
+        // 1. Tìm User bằng token
+        User user = userRepository.findByVerificationToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Token kích hoạt không hợp lệ hoặc không tồn tại."));
 
-        if (user.getIsActive()) {
-            throw new IllegalStateException("Tài khoản đã được kích hoạt trước đó.");
+        // 2. Kiểm tra nếu đã active (để tránh lỗi nếu người dùng bấm 2 lần)
+        if (Boolean.TRUE.equals(user.getIsActive())) {
+            return user;
         }
 
-        if (user.getTokenExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Mã xác nhận đã hết hạn. Vui lòng đăng ký lại.");
-        }
-
-        // Kích hoạt tài khoản và xóa token
-        user.setIsActive(true);
-        user.setConfirmationToken(null);
-        user.setTokenExpiryDate(null);
+        // 3. Kích hoạt User và xóa Token
+        user.setIsActive(true); // <<< ACTIVE TÀI KHOẢN
+        user.setIsEmailVerified(true);
+        user.setVerificationToken(null); // <<< RẤT QUAN TRỌNG: XÓA TOKEN SAU KHI DÙNG
 
         userRepository.save(user);
 
-        // Tùy chọn: Gửi email thông báo kích hoạt thành công (Nếu bạn có)
-        // emailService.sendSuccessConfirmationEmail(user.getEmail(), user.getFullName());
+        return user;
     }
 
 }

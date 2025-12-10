@@ -19,8 +19,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
     List<User> findByRole(UserRole role);
     Page<User> findByRole(UserRole role, Pageable pageable);
-    Optional<User> findByConfirmationToken(String confirmationToken);
-
+    Optional<User> findByVerificationToken(String token);
     @Query("SELECT u FROM User u WHERE u.email LIKE %:keyword% OR u.fullName LIKE %:keyword%")
     List<User> searchUsers(@Param("keyword") String keyword);
 }

@@ -24,6 +24,5 @@ public interface EmailService {
 
     void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant);
 
-    void sendRegistrationConfirmationEmail(String email, String s, String confirmationToken);
+    void sendVerificationEmail(String to, String fullName, String token);
 }
-

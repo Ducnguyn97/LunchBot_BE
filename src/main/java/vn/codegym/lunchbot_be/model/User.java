@@ -34,7 +34,10 @@ public class User {
     private String password;
 
     private String fullName;
+
+    @Column(nullable = false, unique = true)
     private String phone;
+
     private String avatarUrl;
 
     @Enumerated(EnumType.STRING)
@@ -63,6 +66,8 @@ public class User {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    private String verificationToken;
 
     // Relationships
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
