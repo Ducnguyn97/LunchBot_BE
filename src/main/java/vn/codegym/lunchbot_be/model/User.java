@@ -47,10 +47,16 @@ public class User {
     private UserRole role = UserRole.USER;
 
     @Column(nullable = false)
-    private Boolean isActive = true;
+    private Boolean isActive = false;
 
     @Column(nullable = false)
     private Boolean isEmailVerified = false;
+
+    @Column(name = "confirmation_token") // ⭐ THÊM TRƯỜNG TOKEN
+    private String confirmationToken;
+
+    @Column(name = "token_expiry_date") // ⭐ THÊM TRƯỜNG THỜI GIAN HẾT HẠN
+    private LocalDateTime tokenExpiryDate;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

@@ -6,10 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import vn.codegym.lunchbot_be.dto.request.MerchantRegisterRequest;
 import vn.codegym.lunchbot_be.dto.response.AuthResponse;
 import vn.codegym.lunchbot_be.dto.request.LoginRequest;
@@ -82,5 +79,21 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+    @GetMapping("/confirm-registration")
+    public ResponseEntity<String> confirmRegistration(@RequestParam("token") String token) {
+        try {
+            authService.confirmRegistration(token);
+            // Có thể redirect về trang thông báo thành công của FE tại đây
+            return ResponseEntity.ok("Xác nhận đăng ký thành công. Tài khoản của bạn đã được kích hoạt.");
+        } catch (IllegalArgumentException e) {
+            // Token không hợp lệ/hết hạn
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            // Tài khoản đã kích hoạt
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Lỗi hệ thống: Xác nhận thất bại.");
+        }
     }
 }
