@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Xác Thực Tài Khoản LunchBot</title>
+</head>
+<body>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
+    <h2>Xin chào, <span th:text="${fullName}">Tên người dùng</span>!</h2>
+
+    <p>Cảm ơn bạn đã đăng ký tài khoản LunchBot. Vui lòng nhấp vào nút dưới đây để kích hoạt tài khoản của bạn:</p>
+
+    <a th:href="${verificationLink}"
+       style="display: inline-block; padding: 10px 20px; margin: 15px 0; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Kích Hoạt Tài Khoản Của Tôi
+    </a>
+
+<!--    <p>Nếu bạn không thể nhấp vào nút, vui lòng sao chép và dán liên kết sau vào trình duyệt của bạn:</p>-->
+<!--    <p><a th:href="${verificationLink}" th:text="${verificationLink}">[Link Kích Hoạt]</a></p>-->
+
+    <p>Trân trọng,<br>Đội ngũ LunchBot</p>
+
+    <p style="font-size: 10px; color: #999;">&copy; <span th:text="${currentYear}">2025</span> LunchBot. Tất cả quyền được bảo lưu.</p>
+</div>
+</body>
+</html>

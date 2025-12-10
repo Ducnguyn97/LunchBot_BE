@@ -47,20 +47,56 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.url:http://localhost:5173/login}")
     private String appUrl;
-    // Lưu ý: @RequiredArgsConstructor sẽ tự động inject qua constructor
-    // nhưng bạn vẫn có thể giữ @Autowired ở đây
-    @Autowired
-    private JavaMailSender mailSender;
-    @Autowired
-    private ResourceLoader resourceLoader;
+
+    private final JavaMailSender mailSender;
+
+    private final ResourceLoader resourceLoader;
+
     private static final Logger LOGGER = Logger.getLogger(EmailServiceImpl.class.getName());
 
     // ----------------------------------------------------------------------
     // PHƯƠNG THỨC GỬI EMAIL HTML (SỬ DỤNG MIME MESSAGE)
     // ----------------------------------------------------------------------
+    @Async // Đảm bảo việc gửi email không làm chậm request API
+    public void sendVerificationEmail(String to, String fullName, String token) {
+        // Sử dụng templateEngine.process
+        try {
+            Context context = new Context();
+            context.setVariable("fullName", fullName != null ? fullName : to);
+
+            // Link kích hoạt trỏ về Backend endpoint /api/auth/verify
+            // Đảm bảo URL này là domain/host thực tế của Backend (Ví dụ: https://api.lunchbot.vn/api/auth/verify?token=...)
+            String verificationLink = "http://localhost:5173/login?token=" + token;
+
+            context.setVariable("verificationLink", verificationLink);
+            context.setVariable("appName", appName); // Sử dụng biến appName nếu có
+            context.setVariable("currentYear", String.valueOf(Year.now().getValue())); // Sử dụng biến Year
+
+            // Tên template: "emails/email-verification" (Bạn cần tạo file này)
+            String htmlContent = templateEngine.process("emails/email-verification", context);
+
+            sendHtmlEmail(to,
+                    "✅ Xác thực Email để kích hoạt tài khoản LunchBot",
+                    htmlContent);
+
+            log.info("Email kích hoạt thành công tới: {}", to);
+
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi email kích hoạt tới {}: {}", to, e.getMessage(), e);
+            throw new RuntimeException("Không thể gửi email kích hoạt.", e);
+        }
+    }
+
+
+    // =========================================================================
+    // PHƯƠNG THỨC HIỆN CÓ: GỬI EMAIL ĐĂNG KÝ THÀNH CÔNG (Giữ lại cho Merchant)
+    // =========================================================================
     @Async
     public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant) {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
+
+        // LƯU Ý: Với quy trình mới, phương thức này KHÔNG CẦN được gọi cho user thường
+        // vì họ sẽ nhận sendVerificationEmail(). Nó chỉ cần cho Merchant.
 
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -76,8 +112,10 @@ public class EmailServiceImpl implements EmailService {
             // 2. CHỌN TEMPLATE PHÙ HỢP
             String templatePath = isMerchant
                     ? "classpath:templates/emails/merchant_registration_template.html"
-                    : "classpath:templates/emails/user_registration_template.html"; // Template mới
+                    : "classpath:templates/emails/user_registration_template.html";
 
+            // *Bạn cần bổ sung lại logic buildHtmlContent của bạn ở đây*
+            // Hoặc chuyển sang dùng templateEngine.process(...) để thống nhất
             String htmlContent = buildHtmlContent(
                     templatePath,
                     to,
