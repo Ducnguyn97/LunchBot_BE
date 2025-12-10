@@ -23,4 +23,6 @@ public interface EmailService {
     void sendOrderStatusUpdateEmail(String userEmail, String userName, String orderStatus, String orderDetails);
 
     void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant);
+
+    void sendVerificationEmail(String to, String fullName, String token);
 }
