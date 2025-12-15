@@ -11,6 +11,7 @@ import vn.codegym.lunchbot_be.dto.response.DishDetailResponse;
 import vn.codegym.lunchbot_be.dto.response.DishDiscountResponse;
 import vn.codegym.lunchbot_be.dto.response.DishResponse;
 import vn.codegym.lunchbot_be.dto.response.SuggestedDishResponse;
+import vn.codegym.lunchbot_be.exception.ResourceNotFoundException;
 import vn.codegym.lunchbot_be.model.Dish;
 import vn.codegym.lunchbot_be.service.DishService;
 
@@ -18,6 +19,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
 
 @RestController
 @RequestMapping("/api/dishes")
@@ -74,8 +77,16 @@ public class DishController {
         }
     }
 
+    // --- GET (GET /api/dishes/{dishId}) dùng cho lấy thông tin chi tiết user---
     @GetMapping("/{dishId}")
-    public ResponseEntity<?> getDishDetail(@PathVariable Long dishId) {
+    public ResponseEntity<DishDetailResponse> getDishDetail(@PathVariable Long dishId) {
+        DishDetailResponse response = dishService.getDishDetail(dishId);
+        return ResponseEntity.ok(response);
+    }
+
+    // --- GET (GET /api/dishes/info/{dishId}) dùng cho Merchant quản lý món ăn ---
+    @GetMapping("/info/{dishId}")
+    public ResponseEntity<?> getDish(@PathVariable Long dishId) {
         try {
             Dish dish = dishService.findDishById(dishId);
             DishResponse response = DishResponse.fromEntity(dish);
@@ -122,6 +133,7 @@ public class DishController {
             return new ResponseEntity<>("Xóa món ăn thất bại do lỗi hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
     @GetMapping("/suggested")
     public ResponseEntity<?> getSuggestedDishes() {
         try {
@@ -137,6 +149,26 @@ public class DishController {
             return new ResponseEntity<>("Lỗi hệ thống khi tải danh sách món ăn gợi ý.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    // Món ăn cùng danh mục
+    @GetMapping("/{dishId}/related")
+    public ResponseEntity<?> getRelatedDishesByCategory(@PathVariable Long dishId) {
+        try {
+            List<SuggestedDishResponse> relatedDishes = dishService.getRelatedDishesByCategory(dishId);
+            return ResponseEntity.ok(relatedDishes);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Lỗi hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Món ăn xem nhiều nhất
+    @GetMapping("/most-viewed")
+    public ResponseEntity<?> getMostViewedDishes() {
+        try {
+            List<SuggestedDishResponse> mostViewedDishes = dishService.getMostViewedDishes();
+            return ResponseEntity.ok(mostViewedDishes);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Lỗi hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR);
     @GetMapping("/top-discounts")
     public ResponseEntity<?> getTopDiscountedDishes() {
         try {

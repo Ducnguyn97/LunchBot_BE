@@ -22,6 +22,10 @@ public interface DishService {
     DishDetailResponse getDishDetail(Long dishId);
 
     List<SuggestedDishResponse> getTopSuggestedDishes();
+
+    List<SuggestedDishResponse> getRelatedDishesByCategory(Long dishId);
+
+    List<SuggestedDishResponse> getMostViewedDishes();
     List<DishDiscountResponse> getTop8MostDiscountedDishes();
 
 
