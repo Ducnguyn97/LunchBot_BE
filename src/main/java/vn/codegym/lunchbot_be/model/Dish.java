@@ -56,7 +56,7 @@ public class Dish {
     @ColumnDefault("0.00")
     private BigDecimal serviceFee = BigDecimal.ZERO;
 
-    private Integer preparationTime; // minutes
+    private Integer preparationTime;
 
     @Column(nullable = false)
     @ColumnDefault("0")

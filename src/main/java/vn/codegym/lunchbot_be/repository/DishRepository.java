@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import vn.codegym.lunchbot_be.model.Category;
 import vn.codegym.lunchbot_be.model.Dish;
 
 import java.math.BigDecimal;
@@ -25,6 +26,15 @@ public interface DishRepository extends JpaRepository<Dish, Long> {
     List<Dish> findTop8SuggestedDishes();
 
     Page<Dish> findByMerchantId(Long merchantId, Pageable pageable);
+
+    Page<Dish> findByCategoriesContainingAndIsActiveTrueAndIdNot(
+            Category category,
+            Long dishId,
+            Pageable pageable
+    );
+
+
+    Page<Dish> findByIsActiveTrueOrderByViewCountDesc(Pageable pageable);
 
     @Query("SELECT d FROM Dish d " +
             "LEFT JOIN FETCH d.merchant m " +

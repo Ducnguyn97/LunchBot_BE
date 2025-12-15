@@ -9,6 +9,9 @@ import vn.codegym.lunchbot_be.model.Category;
 public class CategoryResponse {
     private Long id;
     private String name;
+    private String slug;
+
+
 
     public static CategoryResponse fromEntity(Category category) {
         if (category == null) {
