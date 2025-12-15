@@ -2,6 +2,7 @@ package vn.codegym.lunchbot_be.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import org.springframework.security.core.Authentication;
@@ -9,11 +10,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import vn.codegym.lunchbot_be.dto.request.MerchantUpdateRequest;
 import vn.codegym.lunchbot_be.dto.response.MerchantResponseDTO;
+import vn.codegym.lunchbot_be.dto.response.PopularMerchantDto;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.repository.MerchantRepository;
 import vn.codegym.lunchbot_be.service.impl.MerchantServiceImpl;
 import vn.codegym.lunchbot_be.service.impl.UserDetailsImpl;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -58,6 +61,33 @@ public class MerchantController {
         Long UserId = userDetails.getId();
         Merchant updatedMerchant = merchantService.updateMerchanntInfo(UserId, request);
         return ResponseEntity.ok(updatedMerchant);
+    }
+
+
+     //GET /api/merchants/popular?limit=8
+    @GetMapping("/popular")
+    public ResponseEntity<List<PopularMerchantDto>> getPopularMerchants(
+            @RequestParam(defaultValue = "8") int limit
+    ) {
+        try {
+            // Giới hạn max 50 để tránh query quá nhiều
+            if (limit > 50) {
+                limit = 50;
+            }
+
+            List<PopularMerchantDto> merchants = merchantService.getPopularMerchants(limit);
+
+            if (merchants.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+
+            return new ResponseEntity<>(merchants, HttpStatus.OK);
+
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching popular merchants: " + e.getMessage());
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
 }
