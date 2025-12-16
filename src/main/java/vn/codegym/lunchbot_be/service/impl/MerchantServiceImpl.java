@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 public class MerchantServiceImpl implements MerchantService {
 
     private final UserRepository userRepository;
+
     private final MerchantRepository merchantRepository;
 
     public Long getMerchantIdByUserId(Long userId) {
@@ -40,6 +41,7 @@ public class MerchantServiceImpl implements MerchantService {
 
     @Transactional
     public Merchant updateMerchanntInfo(Long userId, MerchantUpdateRequest request) {
+
         LocalTime openTime;
         LocalTime closeTime;
 
@@ -69,9 +71,11 @@ public class MerchantServiceImpl implements MerchantService {
         merchant.setCloseTime(closeTime);
 
         return merchantRepository.save(merchant);
+
     }
 
     public MerchantResponseDTO getMerchantProfileByEmail(String email) {
+        // 1. Tìm User và Merchant dựa trên email
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -81,6 +85,7 @@ public class MerchantServiceImpl implements MerchantService {
         }
 
         MerchantResponseDTO response = getMerchantResponseDTO(user, merchant);
+
         return response;
     }
 
@@ -89,6 +94,7 @@ public class MerchantServiceImpl implements MerchantService {
 
         response.setEmail(user.getEmail());
         response.setPhone(user.getPhone());
+
         response.setRestaurantName(merchant.getRestaurantName());
         response.setAddress(merchant.getAddress());
 
