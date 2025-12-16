@@ -30,7 +30,6 @@ import java.util.stream.Collectors;
 public class MerchantServiceImpl implements MerchantService {
 
     private final UserRepository userRepository;
-
     private final MerchantRepository merchantRepository;
 
     public Long getMerchantIdByUserId(Long userId) {
@@ -41,7 +40,6 @@ public class MerchantServiceImpl implements MerchantService {
 
     @Transactional
     public Merchant updateMerchanntInfo(Long userId, MerchantUpdateRequest request) {
-
         LocalTime openTime;
         LocalTime closeTime;
 
@@ -71,11 +69,9 @@ public class MerchantServiceImpl implements MerchantService {
         merchant.setCloseTime(closeTime);
 
         return merchantRepository.save(merchant);
-
     }
 
     public MerchantResponseDTO getMerchantProfileByEmail(String email) {
-        // 1. Tìm User và Merchant dựa trên email
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -85,7 +81,6 @@ public class MerchantServiceImpl implements MerchantService {
         }
 
         MerchantResponseDTO response = getMerchantResponseDTO(user, merchant);
-
         return response;
     }
 
@@ -94,7 +89,6 @@ public class MerchantServiceImpl implements MerchantService {
 
         response.setEmail(user.getEmail());
         response.setPhone(user.getPhone());
-
         response.setRestaurantName(merchant.getRestaurantName());
         response.setAddress(merchant.getAddress());
 
@@ -107,18 +101,18 @@ public class MerchantServiceImpl implements MerchantService {
         return response;
     }
 
-    // ⭐ NEW METHOD: Lấy danh sách nhà hàng nổi tiếng
+    // ⭐ UPDATED METHOD: Lấy danh sách nhà hàng nổi tiếng
     @Override
     public List<PopularMerchantDto> getPopularMerchants(int limit) {
         Pageable pageable = PageRequest.of(0, limit);
 
         try {
-            // Thử query DTO trực tiếp trước
+            // Query DTO trực tiếp
             List<PopularMerchantDto> merchants = merchantRepository.findPopularMerchants(pageable);
 
-            // Enrich data: thêm cuisine từ categories
+            // ✅ Enrich data: thêm REAL categories và images từ DB
             merchants.forEach(dto -> {
-                enrichMerchantData(dto);
+                enrichMerchantDataFromDB(dto);
             });
 
             return merchants;
@@ -186,55 +180,67 @@ public class MerchantServiceImpl implements MerchantService {
                 totalOrders
         );
 
-        // Enrich thêm data
-        enrichMerchantData(dto);
+        // ✅ Enrich thêm data từ DB
+        enrichMerchantDataFromDB(dto);
 
         return dto;
     }
 
-    /**
-     * Enrich merchant data với thông tin bổ sung
-     */
-    private void enrichMerchantData(PopularMerchantDto dto) {
-        // Lấy cuisine từ categories của dishes (mock data cho đơn giản)
-        // TODO: Query thực tế từ DB nếu cần
-        String[] cuisineOptions = {
-                "Món Việt • Phở • Bún",
-                "Fastfood • Gà rán • Burger",
-                "Món Thái • Lẩu • Hải sản",
-                "Nhật Bản • Sushi • Sashimi",
-                "Ý • Pizza • Pasta",
-                "Món Việt • Cơm tấm • Sườn",
-                "Đồ uống • Trà sữa • Smoothie"
-        };
+    // Trong MerchantServiceImpl.java
+    private void enrichMerchantDataFromDB(PopularMerchantDto dto) {
+        try {
+            // 1️⃣ Lấy CATEGORIES THỰC TẾ từ DB
+            List<String> categoryNames = merchantRepository.findCategoryNamesByMerchantId(dto.getId());
 
-        int index = (int) (dto.getId() % cuisineOptions.length);
-        dto.setCuisineFromCategories(cuisineOptions[index]);
-    }
-  
-    public Long getCurrentMerchantId() {
-        // 1. Lấy Email từ SecurityContext
-        var authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("Người dùng chưa đăng nhập");
+            if (!categoryNames.isEmpty()) {
+                // Format: "Món Việt • Phở • Bún" (lấy tối đa 3 categories)
+                String cuisineText = categoryNames.stream()
+                        .limit(3) // Chỉ lấy 3 categories đầu
+                        .collect(Collectors.joining(" • "));
+
+                dto.setCuisineFromCategories(cuisineText);
+
+                System.out.println("✅ Merchant #" + dto.getId() + " - Categories: " + cuisineText);
+            } else {
+                // Fallback nếu không có category
+                dto.setCuisineFromCategories("Đa dạng món ăn");
+                System.out.println("⚠️ Merchant #" + dto.getId() + " - No categories found");
+            }
+
+            // 2️⃣ Lấy ẢNH THỰC TẾ (Logic mới)
+            if (dto.getImageUrl() == null || dto.getImageUrl().isEmpty()) {
+
+                // Gọi Native Query mới
+                List<String> rawImages = merchantRepository.findRawImageJsonByMerchantId(dto.getId());
+
+                if (!rawImages.isEmpty()) {
+                    String rawJson = rawImages.get(0); // Nhận được chuỗi: ["http://..."]
+
+                    // Hàm làm sạch chuỗi (bỏ ngoặc [], dấu ")
+                    String cleanUrl = parseImageJson(rawJson);
+
+                    dto.setImageUrl(cleanUrl);
+                    System.out.println("✅ Merchant #" + dto.getId() + " - Image found: " + cleanUrl);
+                } else {
+                    // Fallback
+                    dto.setImageUrl("https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&h=300&fit=crop");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
-        String email;
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof UserDetails) {
-            email = ((UserDetails) principal).getUsername();
-        } else {
-            email = principal.toString();
-        }
-
-        // 2. Tìm User từ Email để lấy ID
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy User với email: " + email));
-
-        // 3. ✅ Gọi method findByUserId như bạn muốn
-        Merchant merchant = merchantRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new RuntimeException("Tài khoản này chưa đăng ký thông tin Cửa hàng (Merchant)"));
-
-        return merchant.getId();
     }
+
+    // Hàm helper để làm sạch chuỗi JSON ảnh
+    private String parseImageJson(String json) {
+        if (json == null) return null;
+        // Xóa [, ], và "
+        String clean = json.replace("[", "").replace("]", "").replace("\"", "");
+        // Nếu có nhiều ảnh (phân cách dấu phẩy), lấy cái đầu tiên
+        if (clean.contains(",")) {
+            return clean.split(",")[0].trim();
+        }
+        return clean.trim();
+    }
+
 }
