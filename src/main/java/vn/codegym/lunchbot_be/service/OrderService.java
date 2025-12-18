@@ -3,6 +3,8 @@ package vn.codegym.lunchbot_be.service;
 import vn.codegym.lunchbot_be.dto.request.CheckoutRequest;
 import vn.codegym.lunchbot_be.dto.response.CheckoutResponse;
 import vn.codegym.lunchbot_be.dto.response.OrderResponse;
+import vn.codegym.lunchbot_be.dto.response.OrderStatisticsResponse;
+import vn.codegym.lunchbot_be.model.enums.OrderStatus;
 
 import java.util.List;
 
@@ -39,4 +41,12 @@ public interface OrderService {
      * Hủy đơn hàng
      */
     OrderResponse cancelOrder(String email, Long orderId, String reason);
+
+    // Lấy danh sách đơn hàng của Merchant (có hỗ trợ lọc theo trạng thái)
+    List<OrderResponse> getOrdersByMerchant(Long merchantId, OrderStatus status);
+
+    // Merchant cập nhật trạng thái đơn hàng (Ví dụ: Từ PENDING -> PROCESSING)
+    OrderResponse updateOrderStatus(Long merchantId, Long orderId, OrderStatus newStatus);
+
+    OrderStatisticsResponse getOrderStatisticsByMerchant(Long merchantId);
 }

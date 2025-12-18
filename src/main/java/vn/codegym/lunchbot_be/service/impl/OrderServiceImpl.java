@@ -257,8 +257,81 @@ public class OrderServiceImpl implements OrderService {
         return mapToOrderResponse(cancelledOrder);
     }
 
-    // ========== HELPER METHODS ==========
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getOrdersByMerchant(Long merchantId, OrderStatus status) {
+        // 1. Nếu có status thì lọc, không thì lấy hết
+        List<Order> orders;
+        if (status != null) {
+            orders = orderRepository.findByMerchantIdAndStatus(merchantId, status);
+        } else {
+            orders = orderRepository.findByMerchantId(merchantId);
+        }
 
+        // 2. Sắp xếp đơn mới nhất lên đầu
+        return orders.stream()
+                .sorted(Comparator.comparing(Order::getOrderDate).reversed())
+                .map(this::mapToOrderResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse updateOrderStatus(Long merchantId, Long orderId, OrderStatus newStatus) {
+        // 1. Tìm đơn hàng
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+
+        // 2. Validate: Đơn hàng có thuộc về merchant này không?
+        if (!order.getMerchant().getId().equals(merchantId)) {
+            throw new RuntimeException("Bạn không có quyền chỉnh sửa đơn hàng này");
+        }
+
+        // 3. Validate logic chuyển trạng thái (State Transition)
+        // Ví dụ: Không thể chuyển từ CANCELLED về PENDING
+        validateStatusTransition(order.getStatus(), newStatus);
+
+        // 4. Cập nhật
+        order.updateStatus(newStatus);
+        Order savedOrder = orderRepository.save(order);
+
+        return mapToOrderResponse(savedOrder);
+    }
+
+    // Thêm method này vào OrderServiceImpl.java
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderStatisticsResponse getOrderStatisticsByMerchant(Long merchantId) {
+        // Khởi tạo response với giá trị mặc định = 0
+        OrderStatisticsResponse stats = OrderStatisticsResponse.builder()
+                .pendingCount(0L)
+                .confirmedCount(0L)
+                .processingCount(0L)
+                .readyCount(0L)
+                .deliveringCount(0L)
+                .completedCount(0L)
+                .cancelledCount(0L)
+                .todayOrders(0L)
+                .build();
+
+        // Đếm số đơn theo từng trạng thái
+        stats.setPendingCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.PENDING));
+        stats.setConfirmedCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.CONFIRMED));
+        stats.setProcessingCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.PROCESSING));
+        stats.setReadyCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.READY));
+        stats.setDeliveringCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.DELIVERING));
+        stats.setCompletedCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.COMPLETED));
+        stats.setCancelledCount(orderRepository.countByMerchantIdAndStatus(merchantId, OrderStatus.CANCELLED));
+
+        // Đếm đơn hôm nay
+        stats.setTodayOrders(orderRepository.getTodayOrderCount(merchantId));
+
+        // Tính tổng và đơn đang xử lý
+        stats.calculateTotal();
+
+        return stats;
+    }
     /**
      * Generate order number theo format: ORD-YYYYMMDD-XXX
      * VD: ORD-20231215-001
@@ -380,5 +453,12 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return null;
+    }
+
+    // Hàm phụ trợ để kiểm tra logic chuyển trạng thái hợp lệ
+    private void validateStatusTransition(OrderStatus current, OrderStatus next) {
+        if (current == OrderStatus.COMPLETED || current == OrderStatus.CANCELLED) {
+            throw new RuntimeException("Không thể cập nhật đơn hàng đã kết thúc");
+        }
     }
 }
