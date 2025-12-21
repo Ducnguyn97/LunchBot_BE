@@ -11,10 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import vn.codegym.lunchbot_be.dto.request.CouponCreateRequest;
 import vn.codegym.lunchbot_be.dto.request.MerchantUpdateRequest;
-import vn.codegym.lunchbot_be.dto.response.MerchantResponseDTO;
-import vn.codegym.lunchbot_be.dto.response.OrderResponse;
-import vn.codegym.lunchbot_be.dto.response.OrderStatisticsResponse;
-import vn.codegym.lunchbot_be.dto.response.PopularMerchantDto;
+import vn.codegym.lunchbot_be.dto.response.*;
 import vn.codegym.lunchbot_be.model.Coupon;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.model.enums.OrderStatus;
@@ -204,6 +201,23 @@ public class MerchantController {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Không thể tải thống kê: " + e.getMessage()));
         }
+    }
+    @GetMapping("/{merchantId}/statistics/revenue")
+    public ResponseEntity<RevenueStatisticsResponse> getRevenueStats(
+            @PathVariable Long merchantId,
+            @RequestParam(required = false) String timeRange,    // WEEK, MONTH, QUARTER, YEAR
+            @RequestParam(required = false) Integer week,        // Tuần (1-53)
+            @RequestParam(required = false) Integer month,       // Tháng (1-12)
+            @RequestParam(required = false) Integer quarter,     // Quý (1-4)
+            @RequestParam(required = false) Integer year,        // Năm (VD: 2024)
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        // ✅ Gọi service với các params bổ sung
+        RevenueStatisticsResponse response = orderService.getRevenueStatistics(
+                merchantId, timeRange, week, month, quarter, year, page, size
+        );
+        return ResponseEntity.ok(response);
     }
 
 }
