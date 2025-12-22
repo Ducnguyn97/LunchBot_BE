@@ -2,6 +2,7 @@ package vn.codegym.lunchbot_be.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -218,6 +219,29 @@ public class MerchantController {
                 merchantId, timeRange, week, month, quarter, year, page, size
         );
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/orders/by-dish/{dishId}")
+    @PreAuthorize("hasRole('MERCHANT')")
+    public ResponseEntity<?> getOrdersByDish(
+            @PathVariable Long dishId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @AuthenticationPrincipal UserDetailsImpl userDetails){
+        try {
+            Long userId = userDetails.getId();
+            Long merchantId = merchantService.getMerchantIdByUserId(userId);
+            if (merchantId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Không tìm thấy merchant cho user hiện tại."));
+            }
+
+            Page<OrderResponse> ordersPage = orderService.getOrdersByDish(merchantId, dishId, page, size);
+            return ResponseEntity.ok(ordersPage);
+    }catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Lỗi khi lấy đơn hàng theo món ăn: " + e.getMessage()));
+        }
     }
 
 }

@@ -470,6 +470,16 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
+    @Override
+    public Page<OrderResponse> getOrdersByDish(Long merchantId, Long dishId, int page, int size) {
+        // Query với phân trang
+        Pageable pageable = PageRequest.of(page, size, Sort.by("orderDate").descending());
+        // Lấy danh sách đơn hàng chứa dishId
+        Page<Order> orderPage = orderRepository.findOrdersByDishId(merchantId, dishId, pageable);
+        // Map sang OrderResponse
+        return orderPage.map(this::mapToOrderResponse);
+    }
+
 
     /**
      * Generate order number theo format: ORD-YYYYMMDD-XXX

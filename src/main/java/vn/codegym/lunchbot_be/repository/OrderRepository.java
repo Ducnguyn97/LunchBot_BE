@@ -77,4 +77,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
                                       @Param("startDate") LocalDateTime startDate,
                                       @Param("endDate") LocalDateTime endDate,
                                       Pageable pageable);
+
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "JOIN o.orderItems oi " +
+            "WHERE o.merchant.id = :merchantId " +
+            "AND oi.dishId = :dishId")
+    Page<Order> findOrdersByDishId(
+            @Param("merchantId") Long merchantId,
+            @Param("dishId") Long dishId,
+            Pageable pageable
+    );
 }
