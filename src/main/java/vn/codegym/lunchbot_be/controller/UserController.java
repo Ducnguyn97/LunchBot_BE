@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import vn.codegym.lunchbot_be.dto.request.UserUpdateDTO;
+import vn.codegym.lunchbot_be.dto.response.UserMeResponse;
 import vn.codegym.lunchbot_be.dto.response.UserResponseDTO;
 import vn.codegym.lunchbot_be.service.impl.UserServiceImpl;
 
@@ -57,4 +58,19 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Cập nhật thất bại: " + e.getMessage());
         }
     }
+    @GetMapping("/me")
+    public ResponseEntity<?> getMeInfo() {
+        try {
+            String email = getCurrentUserEmail();
+            UserMeResponse userInfo = userService.getHeaderUserInfo(email);
+            return ResponseEntity.ok(userInfo);
+        } catch (SecurityException e) {
+            // Lỗi xác thực: Trả về trạng thái chưa đăng nhập
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(null);
+        } catch (RuntimeException e) {
+            // Lỗi nghiệp vụ (User không tồn tại)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
 }
