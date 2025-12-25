@@ -170,13 +170,31 @@ public class MerchantController {
     public ResponseEntity<?> updateOrderStatus(
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @PathVariable Long orderId,
-            @RequestParam OrderStatus status
+            @RequestBody Map<String, Object> payload
     ) {
         try {
-            Long userId = userDetails.getId();
-            Long merchantId = merchantService.getMerchantIdByUserId(userId);
+            Long merchantId = merchantService.getMerchantIdByUserId(userDetails.getId());
 
-            OrderResponse updatedOrder = orderService.updateOrderStatus(merchantId, orderId, status);
+            // Lấy status và cancelReason từ body
+            String statusStr = (String) payload.get("status");
+            String cancelReason = (String) payload.get("cancelReason");
+            if (statusStr == null || statusStr.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "Status không được để trống"));
+            }
+
+            OrderStatus status;
+            try {
+                status = OrderStatus.valueOf(statusStr);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "Trạng thái không hợp lệ: " + statusStr));
+            }
+            // Gọi service
+            OrderResponse updatedOrder = orderService.updateOrderStatus(
+                    merchantId, orderId, status, cancelReason
+            );
+
             return ResponseEntity.ok(updatedOrder);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
