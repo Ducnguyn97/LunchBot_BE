@@ -1,5 +1,6 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,6 +24,7 @@ public class Address {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private User user;
 
     @Column(nullable = false)
@@ -51,6 +53,18 @@ public class Address {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @OneToMany(mappedBy = "shippingAddress")
     private List<Order> orders = new ArrayList<>();
+
+    @Column(name = "province_id")
+    private Integer provinceId; // ID Tỉnh/Thành từ GHN
+
+    @Column(name = "district_id")
+    private Integer districtId; // ID Quận/Huyện từ GHN
+
+    @Column(name = "ward_code")
+    private String wardCode;    // Mã Phường/Xã từ GHN
 }

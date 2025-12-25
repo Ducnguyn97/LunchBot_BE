@@ -47,20 +47,100 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.url:http://localhost:5173/login}")
     private String appUrl;
-    // Lưu ý: @RequiredArgsConstructor sẽ tự động inject qua constructor
-    // nhưng bạn vẫn có thể giữ @Autowired ở đây
-    @Autowired
-    private JavaMailSender mailSender;
-    @Autowired
-    private ResourceLoader resourceLoader;
-    private static final Logger LOGGER = Logger.getLogger(EmailServiceImpl.class.getName());
 
-    // ----------------------------------------------------------------------
-    // PHƯƠNG THỨC GỬI EMAIL HTML (SỬ DỤNG MIME MESSAGE)
-    // ----------------------------------------------------------------------
+    private final JavaMailSender mailSender;
+
+    private final ResourceLoader resourceLoader;
+
+    private static final Logger LOGGER = Logger.getLogger(EmailServiceImpl.class.getName());
+    @Async // Đảm bảo việc gửi email không làm chậm request API
+    public void sendVerificationEmail(String to, String fullName, String token) {
+        // Sử dụng templateEngine.process
+        try {
+            Context context = new Context();
+            context.setVariable("fullName", fullName != null ? fullName : to);
+
+            // Link kích hoạt trỏ về Backend endpoint /api/auth/verify
+            // Đảm bảo URL này là domain/host thực tế của Backend (Ví dụ: https://api.lunchbot.vn/api/auth/verify?token=...)
+            String verificationLink = "http://localhost:5173/login?token=" + token;
+
+            context.setVariable("verificationLink", verificationLink);
+            context.setVariable("appName", appName); // Sử dụng biến appName nếu có
+            context.setVariable("currentYear", String.valueOf(Year.now().getValue())); // Sử dụng biến Year
+
+            String htmlContent = templateEngine.process("emails/email-verification", context);
+
+            sendHtmlEmail(to,
+                    "✅ Xác thực Email để kích hoạt tài khoản LunchBot",
+                    htmlContent);
+
+            log.info("Email kích hoạt thành công tới: {}", to);
+
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi email kích hoạt tới {}: {}", to, e.getMessage(), e);
+            throw new RuntimeException("Không thể gửi email kích hoạt.", e);
+        }
+    }
+
+
+    @Override
+    @Async
+    public void sendShippingPartnerLockedEmail(String partnerEmail, String partnerName, String reason) {
+        try {
+            Context context = new Context();
+            context.setVariable("partnerName", partnerName);
+            context.setVariable("reason", reason != null ? reason : "Vi phạm chính sách dịch vụ");
+            context.setVariable("appName", appName);
+            context.setVariable("supportEmail", supportEmail);
+            context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
+            log.info("🔴 Đang gửi email LOCKED từ template: emails/shipping-partner-locked");
+            String htmlContent = templateEngine.process("emails/shipping-partner-locked", context);
+
+            sendHtmlEmail(partnerEmail,
+                    "🚫 Thông báo khóa tài khoản đối tác vận chuyển",
+                    htmlContent);
+
+            log.info("✅ Shipping partner LOCKED email sent to: {}", partnerEmail);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to send shipping partner LOCKED email to {}: {}", partnerEmail, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @Async
+    public void sendShippingPartnerUnlockedEmail(String partnerEmail, String partnerName, String reason) {
+        try {
+            Context context = new Context();
+            context.setVariable("partnerName", partnerName);
+            context.setVariable("reason", reason != null ? reason : "Tài khoản đã được mở khóa");
+            context.setVariable("appName", appName);
+            context.setVariable("appUrl", appUrl);
+            context.setVariable("supportEmail", supportEmail);
+            context.setVariable("currentDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+
+            log.info("🟢 Đang gửi email UNLOCKED từ template: emails/shipping-partner-unlocked");
+            String htmlContent = templateEngine.process("emails/shipping-partner-unlocked", context);
+
+            sendHtmlEmail(partnerEmail,
+                    "✅ Thông báo mở khóa tài khoản đối tác vận chuyển",
+                    htmlContent);
+
+            log.info("✅ Shipping partner UNLOCKED email sent to: {}", partnerEmail);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to send shipping partner UNLOCKED email to {}: {}", partnerEmail, e.getMessage(), e);
+        }
+    }
+
+
     @Async
     public void sendRegistrationSuccessEmail(String to, String fullName, String restaurantName, String loginUrl, boolean isMerchant) {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
+
+        // LƯU Ý: Với quy trình mới, phương thức này KHÔNG CẦN được gọi cho user thường
+        // vì họ sẽ nhận sendVerificationEmail(). Nó chỉ cần cho Merchant.
 
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -76,8 +156,10 @@ public class EmailServiceImpl implements EmailService {
             // 2. CHỌN TEMPLATE PHÙ HỢP
             String templatePath = isMerchant
                     ? "classpath:templates/emails/merchant_registration_template.html"
-                    : "classpath:templates/emails/user_registration_template.html"; // Template mới
+                    : "classpath:templates/emails/user_registration_template.html";
 
+            // *Bạn cần bổ sung lại logic buildHtmlContent của bạn ở đây*
+            // Hoặc chuyển sang dùng templateEngine.process(...) để thống nhất
             String htmlContent = buildHtmlContent(
                     templatePath,
                     to,

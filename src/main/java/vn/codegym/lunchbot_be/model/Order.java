@@ -1,5 +1,7 @@
 package vn.codegym.lunchbot_be.model;
 
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 import vn.codegym.lunchbot_be.model.enums.OrderStatus;
 import vn.codegym.lunchbot_be.model.enums.PaymentMethod;
 import vn.codegym.lunchbot_be.model.enums.PaymentStatus;
@@ -37,12 +39,23 @@ public class Order {
     private Merchant merchant;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shipping_address_id")
+    @JoinColumn(
+            name = "shipping_address_id",
+            nullable = true,
+            foreignKey = @ForeignKey(
+                    name = "fk_order_shipping_address",
+                    foreignKeyDefinition = "FOREIGN KEY (shipping_address_id) REFERENCES addresses(id) ON DELETE SET NULL"
+            )
+    )
+    @NotFound(action = NotFoundAction.IGNORE)
     private Address shippingAddress;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shipping_partner_id")
     private ShippingPartner shippingPartner;
+
+    @Column(precision = 5, scale = 2)
+    private BigDecimal commissionRate;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "coupon_id")
@@ -76,9 +89,12 @@ public class Order {
     private BigDecimal totalAmount;
 
     @Column(precision = 12, scale = 2)
-    private BigDecimal commissionFee = BigDecimal.ZERO;
+    private BigDecimal shippingCommissionFee = BigDecimal.ZERO;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(precision = 12, scale = 2)
+    private BigDecimal platformCommissionFee = BigDecimal.ZERO;
+
+    @Column(columnDefinition = "TEXT", length = 500)
     private String notes;
 
     @CreationTimestamp
@@ -106,7 +122,7 @@ public class Order {
 
         // Calculate commission
         if (this.merchant != null) {
-            this.commissionFee = this.itemsTotal.multiply(this.merchant.getCommissionRate());
+            this.shippingCommissionFee = this.itemsTotal.multiply(this.merchant.getCommissionRate());
         }
 
         // Calculate final total
@@ -114,7 +130,7 @@ public class Order {
                 .subtract(this.discountAmount)
                 .add(this.serviceFee)
                 .add(this.shippingFee)
-                .add(this.commissionFee);
+                .add(this.shippingCommissionFee);
     }
 
     public boolean isCancellable() {

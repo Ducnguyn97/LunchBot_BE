@@ -1,5 +1,8 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.ColumnDefault;
@@ -12,14 +15,17 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "dishes")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @ToString(exclude = {"merchant", "categories", "orderItems", "cartItems", "favorites"})
+@EqualsAndHashCode(exclude = {"merchant", "categories", "orderItems", "cartItems", "favorites"})
 public class Dish {
 
     @Id
@@ -28,12 +34,13 @@ public class Dish {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "merchant_id", nullable = false)
+    @JsonIgnoreProperties({"dishes", "handler", "hibernateLazyInitializer"})
     private Merchant merchant;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", length = 5000)
     private String description;
 
     @Column(name = "images_urls",columnDefinition = "JSON")
@@ -49,7 +56,7 @@ public class Dish {
     @ColumnDefault("0.00")
     private BigDecimal serviceFee = BigDecimal.ZERO;
 
-    private Integer preparationTime; // minutes
+    private Integer preparationTime;
 
     @Column(nullable = false)
     @ColumnDefault("0")
@@ -71,6 +78,10 @@ public class Dish {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("displayOrder ASC")
+    private List<DishImage> images = new ArrayList<>();
+
     // Many-to-Many with Category
     @ManyToMany
     @JoinTable(
@@ -80,13 +91,14 @@ public class Dish {
     )
     private Set<Category> categories = new HashSet<>();
 
-    @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<OrderItem> orderItems = new ArrayList<>();
+//    @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
+//    private List<OrderItem> orderItems = new ArrayList<>();
 
     @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> cartItems = new ArrayList<>();
 
     @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonBackReference
     private List<Favorite> favorites = new ArrayList<>();
 
     // Helper method to increment view count

@@ -2,26 +2,46 @@ package vn.codegym.lunchbot_be.service.impl;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import vn.codegym.lunchbot_be.dto.request.MerchantUpdateRequest;
+import vn.codegym.lunchbot_be.dto.response.DishResponse;
+import vn.codegym.lunchbot_be.dto.response.MerchantProfileResponse;
 import vn.codegym.lunchbot_be.dto.response.MerchantResponseDTO;
+import vn.codegym.lunchbot_be.dto.response.PopularMerchantDto;
 import vn.codegym.lunchbot_be.exception.InvalidOperationException;
 import vn.codegym.lunchbot_be.exception.ResourceNotFoundException;
+import vn.codegym.lunchbot_be.model.Dish;
 import vn.codegym.lunchbot_be.model.Merchant;
 import vn.codegym.lunchbot_be.model.User;
+import vn.codegym.lunchbot_be.repository.DishRepository;
 import vn.codegym.lunchbot_be.repository.MerchantRepository;
 import vn.codegym.lunchbot_be.repository.UserRepository;
+import vn.codegym.lunchbot_be.service.MerchantService;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class MerchantServiceImpl {
+public class MerchantServiceImpl implements MerchantService {
 
     private final UserRepository userRepository;
 
     private final MerchantRepository merchantRepository;
+
+    private final DishRepository dishRepository;
+
+    public Long getMerchantIdByUserId(Long userId) {
+        Merchant merchant = merchantRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy Merchant với User ID: " + userId));
+        return merchant.getId();
+    }
 
     @Transactional
     public Merchant updateMerchanntInfo(Long userId, MerchantUpdateRequest request) {
@@ -68,6 +88,12 @@ public class MerchantServiceImpl {
             throw new ResourceNotFoundException("Merchant profile not found for this user");
         }
 
+        MerchantResponseDTO response = getMerchantResponseDTO(user, merchant);
+
+        return response;
+    }
+
+    private static MerchantResponseDTO getMerchantResponseDTO(User user, Merchant merchant) {
         MerchantResponseDTO response = new MerchantResponseDTO();
 
         response.setEmail(user.getEmail());
@@ -82,8 +108,194 @@ public class MerchantServiceImpl {
         response.setCloseTime(
                 merchant.getCloseTime() != null ? merchant.getCloseTime().toString() : ""
         );
-
         return response;
     }
 
+    // ⭐ UPDATED METHOD: Lấy danh sách nhà hàng nổi tiếng
+    @Override
+    public List<PopularMerchantDto> getPopularMerchants(int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+
+        try {
+            // Query DTO trực tiếp
+            List<PopularMerchantDto> merchants = merchantRepository.findPopularMerchants(pageable);
+            // ✅ Enrich data: thêm REAL categories và images từ DB
+            merchants.forEach(dto -> {
+                enrichMerchantDataFromDB(dto);
+            });
+            return merchants;
+        } catch (Exception e) {
+            // Nếu query DTO không work, dùng alternative query
+            System.out.println("⚠️ Query DTO failed, using alternative: " + e.getMessage());
+            return getPopularMerchantsAlternative(limit);
+        }
+    }
+
+    @Override
+    public MerchantProfileResponse getMerchantById(Long id) {
+        // Tìm merchant hoặc ném lỗi nếu không thấy
+        Merchant merchant = merchantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy cửa hàng với ID: " + id));
+
+        // Chuyển đổi từ Entity sang DTO
+        return MerchantProfileResponse.builder()
+                .restaurantName(merchant.getRestaurantName())
+                .address(merchant.getAddress())
+                .phone(merchant.getPhone())
+                .avatarUrl(merchant.getAvatarUrl())
+                .openTime(merchant.getOpenTime())
+                .closeTime(merchant.getCloseTime())
+                .build();
+    }
+
+    /**
+     * Alternative method: Manual mapping từ Entity sang DTO
+     */
+    private List<PopularMerchantDto> getPopularMerchantsAlternative(int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+        List<Merchant> merchants = merchantRepository.findApprovedMerchantsWithActiveDishes(pageable);
+
+        return merchants.stream()
+                .map(this::mapToPopularMerchantDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Map Merchant Entity sang PopularMerchantDto
+     */
+    private PopularMerchantDto mapToPopularMerchantDto(Merchant merchant) {
+        List<Dish> activeDishes = merchant.getDishes().stream()
+                .filter(Dish::getIsActive)
+                .collect(Collectors.toList());
+
+        if (activeDishes.isEmpty()) {
+            return null; // Skip merchant không có món
+        }
+
+        // Tính toán dữ liệu
+        BigDecimal minPrice = activeDishes.stream()
+                .map(Dish::getPrice)
+                .min(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+
+        BigDecimal maxPrice = activeDishes.stream()
+                .map(Dish::getPrice)
+                .max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+
+        Long totalOrders = activeDishes.stream()
+                .mapToLong(Dish::getOrderCount)
+                .sum();
+
+        // Lấy ảnh đầu tiên
+        String imageUrl = activeDishes.stream()
+                .flatMap(dish -> dish.getImages().stream())
+                .findFirst()
+                .map(image -> image.getImageUrl())
+                .orElse(null);
+
+        PopularMerchantDto dto = new PopularMerchantDto(
+                merchant.getId(),
+                merchant.getRestaurantName(),
+                merchant.getAddress(),
+                imageUrl,
+                minPrice,
+                maxPrice,
+                totalOrders
+        );
+
+        // ✅ Enrich thêm data từ DB
+        enrichMerchantDataFromDB(dto);
+
+        return dto;
+    }
+
+    // Trong MerchantServiceImpl.java
+    private void enrichMerchantDataFromDB(PopularMerchantDto dto) {
+        try {
+            // 1️⃣ Lấy CATEGORIES THỰC TẾ từ DB
+            List<String> categoryNames = merchantRepository.findCategoryNamesByMerchantId(dto.getId());
+            if (!categoryNames.isEmpty()) {
+                // Format: "Món Việt • Phở • Bún" (lấy tối đa 3 categories)
+                String cuisineText = categoryNames.stream()
+                        .limit(3) // Chỉ lấy 3 categories đầu
+                        .collect(Collectors.joining(" • "));
+
+                dto.setCuisineFromCategories(cuisineText);
+
+            } else {
+                // Fallback nếu không có category
+                dto.setCuisineFromCategories("Đa dạng món ăn");
+            }
+            // 2️⃣ Lấy ẢNH THỰC TẾ (Logic mới)
+            if (dto.getImageUrl() == null || dto.getImageUrl().isEmpty()) {
+
+                // Gọi Native Query mới
+                List<String> rawImages = merchantRepository.findRawImageJsonByMerchantId(dto.getId());
+
+                if (!rawImages.isEmpty()) {
+                    String rawJson = rawImages.get(0); // Nhận được chuỗi: ["http://..."]
+
+                    // Hàm làm sạch chuỗi (bỏ ngoặc [], dấu ")
+                    String cleanUrl = parseImageJson(rawJson);
+
+                    dto.setImageUrl(cleanUrl);
+                } else {
+                    // Fallback
+                    dto.setImageUrl("https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&h=300&fit=crop");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    // Hàm helper để làm sạch chuỗi JSON ảnh
+    private String parseImageJson(String json) {
+        if (json == null) return null;
+        // Xóa [, ], và "
+        String clean = json.replace("[", "").replace("]", "").replace("\"", "");
+        // Nếu có nhiều ảnh (phân cách dấu phẩy), lấy cái đầu tiên
+        if (clean.contains(",")) {
+            return clean.split(",")[0].trim();
+        }
+        return clean.trim();
+    }
+
+    @Override
+    @Transactional
+    public void updateMerchantAvatar(Long userId, String avatarUrl) {
+        Merchant merchant = merchantRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Merchant không tồn tại"));
+        merchant.setAvatarUrl(avatarUrl);
+        merchantRepository.save(merchant);
+    }
+
+    @Override
+    public Merchant findByUserId(Long userId) {
+        return merchantRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin nhà hàng cho người dùng này."));
+    }
+
+    @Override
+    public List<DishResponse> getDishesByMerchantId(Long merchantId) {
+        // 1. Kiểm tra sự tồn tại của Merchant (tùy chọn nhưng nên có)
+        if (!merchantRepository.existsById(merchantId)) {
+            throw new ResourceNotFoundException("Nhà hàng không tồn tại với ID: " + merchantId);
+        }
+
+        // 2. Gọi Repository lấy danh sách món ăn
+        List<Dish> dishes = dishRepository.findByMerchantIdAndIsActiveTrue(merchantId);
+
+        // 3. Chuyển đổi từ Entity sang DishResponse DTO
+        return dishes.stream()
+                .map(dish -> DishResponse.builder()
+                        .id(dish.getId())
+                        .name(dish.getName())
+                        .description(dish.getDescription())
+                        .price(dish.getPrice())
+                        .imagesUrls(dish.getImagesUrls())
+                        // Thêm các thuộc tính khác của DishResponse tại đây
+                        .build())
+                .collect(Collectors.toList());
+    }
 }
