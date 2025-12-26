@@ -77,6 +77,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "api/dishes/suggested",
                                 "/api/dishes/{dishId}",
                                 "/api/merchants/profile/{merchantId}",
+                                "/api/vnpay/vnpay-ipn",
+                                "/api/create-payment",
                                 "/api/dishes/{dishId}/related",
                                 "api/dishes/list",
                                 "api/merchants/profile/{id}/dishes",

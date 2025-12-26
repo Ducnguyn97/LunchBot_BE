@@ -64,6 +64,9 @@ public class Order {
     @Column(precision = 5, scale = 2)
     private BigDecimal commissionRate;
 
+    private String vnpayTransactionRef;
+    private String vnpayAmount;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "coupon_id")
     @JsonIgnore
