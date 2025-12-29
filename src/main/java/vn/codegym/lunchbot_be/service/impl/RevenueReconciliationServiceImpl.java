@@ -12,15 +12,11 @@ import vn.codegym.lunchbot_be.dto.response.MonthlyRevenueResponse;
 import vn.codegym.lunchbot_be.dto.response.OrderRevenueDetailDTO;
 import vn.codegym.lunchbot_be.dto.response.ReconciliationRequestResponse;
 import vn.codegym.lunchbot_be.dto.response.ReconciliationSummaryResponse;
-import vn.codegym.lunchbot_be.model.Merchant;
-import vn.codegym.lunchbot_be.model.Order;
-import vn.codegym.lunchbot_be.model.ReconciliationRequest;
-import vn.codegym.lunchbot_be.model.User;
+import vn.codegym.lunchbot_be.model.*;
 import vn.codegym.lunchbot_be.model.enums.ReconciliationStatus;
-import vn.codegym.lunchbot_be.repository.MerchantRepository;
-import vn.codegym.lunchbot_be.repository.OrderRepository;
-import vn.codegym.lunchbot_be.repository.ReconciliationRequestRepository;
-import vn.codegym.lunchbot_be.repository.UserRepository;
+import vn.codegym.lunchbot_be.model.enums.TransactionStatus;
+import vn.codegym.lunchbot_be.model.enums.TransactionType;
+import vn.codegym.lunchbot_be.repository.*;
 import vn.codegym.lunchbot_be.service.RevenueReconciliationService;
 
 import java.math.BigDecimal;
@@ -39,6 +35,7 @@ public class RevenueReconciliationServiceImpl implements RevenueReconciliationSe
     private final ReconciliationRequestRepository reconciliationRepository;
     private final MerchantRepository merchantRepository;
     private final UserRepository userRepository;
+    private final TransactionRepository transactionRepository;
     // Ngưỡng doanh thu để áp dụng mức chiết khấu thấp hơn
     private static final BigDecimal REVENUE_THRESHOLD = new BigDecimal("200000000"); // 200 triệu
 
@@ -211,6 +208,30 @@ public class RevenueReconciliationServiceImpl implements RevenueReconciliationSe
 
         // 3. Thực hiện logic Approve (Sử dụng method trong Entity)
         request.approve(admin); // Method này set status = APPROVED, reviewedBy, reviewedAt
+
+        Merchant merchant = request.getMerchant();
+        BigDecimal netRevenue = request.getNetRevenue(); // Số tiền thực nhận
+
+        BigDecimal balanceBefore = merchant.getCurrentBalance();
+        BigDecimal balanceAfter = balanceBefore.add(netRevenue);
+
+        merchant.setCurrentBalance(balanceAfter);
+        merchantRepository.save(merchant);
+
+        // 5. TẠO TRANSACTION LOG
+        Transaction transaction = Transaction.builder()
+                .merchant(merchant)
+                .transactionType(TransactionType.MONTHLY_PAYOUT)
+                .amount(netRevenue)
+                .balanceBefore(balanceBefore)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.COMPLETED)
+                .transactionDate(LocalDateTime.now())
+                .reconciliationRequest(request)
+                .notes("Thanh toán doanh thu tháng " + request.getYearMonth())
+                .build();
+
+        transactionRepository.save(transaction);
 
         // 4. Lưu
         ReconciliationRequest saved = reconciliationRepository.save(request);
