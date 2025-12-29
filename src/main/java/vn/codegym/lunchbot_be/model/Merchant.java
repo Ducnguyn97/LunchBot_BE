@@ -1,10 +1,13 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.CreationTimestamp;
 import vn.codegym.lunchbot_be.model.enums.MerchantStatus;
+import vn.codegym.lunchbot_be.model.enums.PartnerStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -14,12 +17,15 @@ import java.util.List;
 
 @Entity
 @Table(name = "merchants")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @ToString(exclude = {"user", "dishes", "orders", "coupons", "transactions",
-        "withdrawalRequests", "revenueClaims"})
+        "withdrawalRequests", "revenueClaims", "reconciliationRequests"})
+@EqualsAndHashCode(exclude = {"user", "dishes", "orders", "coupons", "transactions",
+        "withdrawalRequests", "revenueClaims", "reconciliationRequests"})
 public class Merchant {
 
     @Id
@@ -28,12 +34,15 @@ public class Merchant {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
+    @JsonIgnore
     private User user;
 
-    @Column(nullable = false)
     private String restaurantName;
 
     private String address;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
 
     @Column(unique = true)
     private String phone;
@@ -45,8 +54,8 @@ public class Merchant {
     @ColumnDefault("0.00")
     private BigDecimal revenueTotal = BigDecimal.ZERO;
 
-    @Column(nullable = false)
-    private Boolean isPartner = false;
+    @Enumerated(EnumType.STRING)
+    private PartnerStatus partnerStatus = PartnerStatus.NONE;
 
     @Column(nullable = false)
     @ColumnDefault("false")
@@ -79,17 +88,23 @@ public class Merchant {
     @ColumnDefault("0.00001")
     private BigDecimal commissionRate = new BigDecimal("0.00001");
 
-    // Relationships
     @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Notification> notifications = new ArrayList<>();
+
+    @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Dish> dishes = new ArrayList<>();
 
     @OneToMany(mappedBy = "merchant")
+    @JsonIgnore
     private List<Order> orders = new ArrayList<>();
 
     @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    @JsonIgnore
     private List<Coupon> coupons = new ArrayList<>();
 
-    @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Transaction> transactions = new ArrayList<>();
 
     @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -97,6 +112,9 @@ public class Merchant {
 
     @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RevenueClaim> revenueClaims = new ArrayList<>();
+
+    @OneToMany(mappedBy = "merchant", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ReconciliationRequest> reconciliationRequests = new ArrayList<>();
 
     // Business methods
     public boolean canBecomePartner() {

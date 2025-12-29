@@ -6,10 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import vn.codegym.lunchbot_be.dto.request.MerchantRegisterRequest;
 import vn.codegym.lunchbot_be.dto.response.AuthResponse;
 import vn.codegym.lunchbot_be.dto.request.LoginRequest;
@@ -75,6 +72,56 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage()); // 409 Conflict
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Đăng ký thất bại do lỗi hệ thống.");
+        }
+    }
+
+    @GetMapping("/verify")
+    public ResponseEntity<?> verifyEmail(@RequestParam String token) {
+        try {
+            authService.verifyAccount(token);
+
+            // Chuyển hướng người dùng về trang đăng nhập của FE sau khi kích hoạt thành công
+            String redirectUrl = "http://localhost:5173/login?verify_status=success";
+
+            return ResponseEntity
+                    .status(HttpStatus.FOUND) // Mã 302 Found cho việc chuyển hướng
+                    .header("Location", redirectUrl)
+                    .build();
+
+        } catch (IllegalArgumentException e) {
+            // Token không hợp lệ/không tồn tại
+            String redirectUrl = "http://localhost:5173/verify-result?verify_status=invalid_token";
+            return ResponseEntity
+                    .status(HttpStatus.FOUND)
+                    .header("Location", redirectUrl)
+                    .build();
+        } catch (Exception e) {
+            // Lỗi hệ thống
+            String redirectUrl = "http://localhost:5173/verify-result?verify_status=error";
+            return ResponseEntity
+                    .status(HttpStatus.FOUND)
+                    .header("Location", redirectUrl)
+                    .build();
+        }
+    }
+
+    @GetMapping("/activate") // Chọn GET cho đơn giản, vì link email chỉ là GET
+    public ResponseEntity<?> activateAccount(@RequestParam String token) {
+        try {
+            // Gọi Service để xử lý kích hoạt
+            authService.verifyAccount(token); // Phương thức này sẽ set isActive=true và xóa token
+
+            // Trả về thành công 200 OK
+            return ResponseEntity.ok("Tài khoản đã được kích hoạt thành công.");
+
+        } catch (IllegalArgumentException e) {
+            // Token không hợp lệ/không tồn tại
+            return ResponseEntity.badRequest().body("Lỗi kích hoạt: Token không hợp lệ.");
+        } catch (IllegalStateException e) {
+            // Token hết hạn (nếu có logic kiểm tra hết hạn)
+            return ResponseEntity.status(HttpStatus.GONE).body("Lỗi kích hoạt: Token đã hết hạn."); // 410 GONE
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Lỗi hệ thống trong quá trình kích hoạt tài khoản.");
         }
     }
 

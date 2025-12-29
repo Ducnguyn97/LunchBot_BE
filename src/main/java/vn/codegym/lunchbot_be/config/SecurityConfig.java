@@ -3,12 +3,15 @@ package vn.codegym.lunchbot_be.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,6 +24,7 @@ import vn.codegym.lunchbot_be.service.CustomUserDetailsService;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -49,6 +53,12 @@ public class SecurityConfig {
     }
 
     @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring()
+                .requestMatchers("/ws/**", "/ws", "/error");
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 // 1. Enable CORS với config từ CorsConfig
@@ -64,8 +74,29 @@ public class SecurityConfig {
                 // 4. Authorization rules
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/**", "/public/**").permitAll()
-                        .requestMatchers("/api/admin/**").permitAll()
-                        .requestMatchers("/api/merchants/**").hasRole("MERCHANT")
+                        .requestMatchers(HttpMethod.GET, "api/dishes/suggested",
+                                "/api/dishes/{dishId}",
+                                "/api/merchants/profile/{merchantId}",
+                                "api/payment/**",
+                                "api/merchants/all",
+                                "api/coupons/all-grouped",
+                                "/api/dishes/{dishId}/related",
+                                "api/dishes/list",
+                                "api/merchants/profile/{id}/dishes",
+                                "api/favorites/**",
+                                "/api/merchants/popular").permitAll()
+                        .requestMatchers("/api/merchants/current/id").authenticated()
+                        .requestMatchers("/api/cart/**").authenticated()
+                        .requestMatchers("/api/addresses/**").authenticated()
+                        .requestMatchers("/api/checkout/**").authenticated()
+                        .requestMatchers("/api/orders/**").authenticated()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/merchants/**", "/api/dishes/**").hasRole("MERCHANT")
+                        .requestMatchers("/api/categories/**").permitAll()
+                        .requestMatchers("/api/cart/**").authenticated()
+                        .requestMatchers("/api/coupons/**").permitAll()
+                        .requestMatchers("/api/delivery/**").hasRole("ADMIN")
+                        .requestMatchers("/api/ghn/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .httpBasic(AbstractHttpConfigurer::disable)

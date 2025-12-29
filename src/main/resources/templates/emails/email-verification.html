@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Kích Hoạt Tài Khoản - Trưa nay ăn gì</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; padding: 20px; border-radius: 8px;">
+
+    <h1 style="color: #F08080; text-align: center; border-bottom: 2px solid #F08080; padding-bottom: 10px;">
+        Trưa nay ăn gì
+    </h1>
+
+    <h2 style="color: #333; font-weight: normal;">
+        Xin chào, <span th:text="${fullName}">bạn</span>!
+    </h2>
+
+    <p style="font-size: 16px; line-height: 1.5; color: #555;">
+        Bạn đã đăng ký tài khoản thành công.
+        Vui lòng nhấn vào
+        <a th:href="${verificationLink}"
+           style="color: #F08080; text-decoration: none; font-weight: bold;">
+            đây
+        </a>
+        để kích hoạt tài khoản sử dụng.
+    </p>
+
+
+    <p style="font-size: 14px; color: #333; margin-top: 30px;">
+        Trân trọng,<br>
+        Đội ngũ "LunchBot - Trưa nay ăn gì"
+    </p>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+    <p style="font-size: 10px; color: #999; text-align: center;">
+        &copy; <span th:text="${currentYear}">2025</span>LunchBot - Trưa nay ăn gì.
+        <br>
+        Nếu bạn không đăng ký tài khoản này, vui lòng bỏ qua email này.
+    </p>
+</div>
+</body>
+</html>

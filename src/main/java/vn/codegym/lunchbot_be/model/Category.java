@@ -1,5 +1,6 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -8,7 +9,8 @@ import java.util.Set;
 
 @Entity
 @Table(name = "categories")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -28,5 +30,6 @@ public class Category {
     private String iconUrl;
 
     @ManyToMany(mappedBy = "categories")
+    @JsonIgnore
     private Set<Dish> dishes = new HashSet<>();
 }

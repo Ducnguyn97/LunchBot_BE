@@ -1,5 +1,6 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import vn.codegym.lunchbot_be.model.enums.Gender;
 import vn.codegym.lunchbot_be.model.enums.UserRole;
 import jakarta.persistence.*;
@@ -16,11 +17,13 @@ import java.util.List;
 @Entity
 @Table(name = "users",
         uniqueConstraints = @UniqueConstraint(columnNames = "email"))
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @ToString(exclude = {"password", "addresses", "orders", "favorites", "notifications"})
+@EqualsAndHashCode(exclude = {"addresses", "orders", "favorites", "notifications", "cart", "merchant"})
 public class User {
 
     @Id
@@ -34,7 +37,10 @@ public class User {
     private String password;
 
     private String fullName;
+
+    @Column(nullable = false, unique = true)
     private String phone;
+
     private String avatarUrl;
 
     @Enumerated(EnumType.STRING)
@@ -47,7 +53,7 @@ public class User {
     private UserRole role = UserRole.USER;
 
     @Column(nullable = false)
-    private Boolean isActive = true;
+    private Boolean isActive = false;
 
     @Column(nullable = false)
     private Boolean isEmailVerified = false;
@@ -58,8 +64,11 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    private String verificationToken;
+
     // Relationships
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Address> addresses = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)

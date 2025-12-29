@@ -1,5 +1,8 @@
 package vn.codegym.lunchbot_be.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.hibernate.annotations.ColumnDefault;
 import vn.codegym.lunchbot_be.model.enums.DiscountType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,8 +15,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "coupons", uniqueConstraints = @UniqueConstraint(columnNames = "code"))
-@Data
+@Table(name = "coupons")
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -26,16 +30,18 @@ public class Coupon {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "merchant_id", nullable = false)
+    @JsonIgnoreProperties({"coupons", "orders", "dishes", "user", "hibernateLazyInitializer", "handler"})
+    @JsonIgnore
     private Merchant merchant;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = false)
     private String code;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private DiscountType discountType;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 10)
     private BigDecimal discountValue;
 
     @Column(nullable = false)
@@ -53,10 +59,15 @@ public class Coupon {
     @Column(nullable = false)
     private Boolean isActive = true;
 
+    @Column(nullable = false)
+    @ColumnDefault("0")
+    private BigDecimal minOrderValue = BigDecimal.ZERO;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "coupon")
+    @JsonIgnore
     private List<Order> orders = new ArrayList<>();
 
     // Business methods

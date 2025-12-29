@@ -23,6 +23,8 @@ import vn.codegym.lunchbot_be.repository.UserRepository;
 import vn.codegym.lunchbot_be.service.EmailService;
 import vn.codegym.lunchbot_be.util.JwtUtil;
 
+import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
@@ -68,7 +70,6 @@ public class AuthServiceImpl {
                 .phone(request.getPhone())
                 .user(user)
                 .isApproved(false)
-                .isPartner(false)
                 .isLocked(false)
                 .status(MerchantStatus.PENDING)
                 .build();
@@ -119,35 +120,33 @@ public class AuthServiceImpl {
             throw new IllegalStateException("Email đã được đăng ký. Vui lòng sử dụng email khác.");
         }
 
-        // 3. Tạo User Entity
+        String token = UUID.randomUUID().toString();
+
         User newUser = User.builder()
                 .email(request.getEmail())
                 .fullName(request.getName())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(UserRole.USER) // Đảm bảo role là USER
-                .isActive(true)
+                .role(UserRole.USER)
+                .isActive(false) // <<< Đảm bảo là FALSE
                 .isEmailVerified(false)
+                .verificationToken(token) // LƯU TOKEN VÀO USER
                 .build();
 
         User savedUser = userRepository.save(newUser);
 
-        // 4. Gửi Email thông báo (Theo yêu cầu của Task)
+        // 4. Gửi Email thông báo (Đã tích hợp: chỉ gửi email kích hoạt)
         try {
-            // 1. Đảm bảo tên người nhận KHÔNG NULL
             String recipientName = savedUser.getFullName() != null
                     ? savedUser.getFullName()
                     : savedUser.getEmail();
 
-            // 2. Đảm bảo MerchantName KHÔNG NULL (vì User thường không có MerchantName)
-            // Lỗi xảy ra là do tham số này!
-            String merchantName = ""; // <--- SỬ DỤNG CHUỖI RỖNG AN TOÀN
+            // XÓA BỎ LỜI GỌI sendRegistrationSuccessEmail()
 
-            emailService.sendRegistrationSuccessEmail(
+            // CHỈ GIỮ LẠI LỜI GỌI GỬI EMAIL KÍCH HOẠT (Đây là email duy nhất được gửi)
+            emailService.sendVerificationEmail(
                     savedUser.getEmail(),
                     recipientName,
-                    merchantName,  // <--- ĐÃ THAY NULL BẰNG CHUỖI RỖNG
-                    "http://localhost:5173/login",
-                    false
+                    token
             );
         } catch (Exception e) {
             System.err.println("Lỗi gửi email: " + e.getMessage());
@@ -176,7 +175,12 @@ public class AuthServiceImpl {
         // Lấy lại User object từ DB để lấy các thông tin khác (Merchant, Role...)
         // Hoặc sử dụng method getUserByEmail của CustomUserDetailsService nếu bạn có
         User user = userRepository.findByEmail(springUser.getUsername())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found after successful authentication"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found..."));
+
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            // Sử dụng BadCredentialsException hoặc một custom Exception để ngăn đăng nhập
+            throw new BadCredentialsException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email.");
+        }
 
         // Tạo JWT token
         String token = jwtUtil.generateToken(
@@ -192,6 +196,27 @@ public class AuthServiceImpl {
                 .role(user.getRole().name())
                 .userId(user.getId())
                 .build();
+    }
+
+    @Transactional
+    public User verifyAccount(String token) {
+        // 1. Tìm User bằng token
+        User user = userRepository.findByVerificationToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Token kích hoạt không hợp lệ hoặc không tồn tại."));
+
+        // 2. Kiểm tra nếu đã active (để tránh lỗi nếu người dùng bấm 2 lần)
+        if (Boolean.TRUE.equals(user.getIsActive())) {
+            return user;
+        }
+
+        // 3. Kích hoạt User và xóa Token
+        user.setIsActive(true); // <<< ACTIVE TÀI KHOẢN
+        user.setIsEmailVerified(true);
+        user.setVerificationToken(null); // <<< RẤT QUAN TRỌNG: XÓA TOKEN SAU KHI DÙNG
+
+        userRepository.save(user);
+
+        return user;
     }
 
 }
