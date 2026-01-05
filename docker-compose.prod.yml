@@ -1,0 +1,59 @@
+services:
+  # Service Database
+  lunchbot_db:
+    image: mysql:8.0
+    container_name: mysql_lunchbot_prod
+    restart: always
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --skip-character-set-client-handshake
+    environment:
+      MYSQL_DATABASE: lunchbot_db
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data_prod:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      timeout: 20s
+      retries: 10
+      start_period: 30s
+    networks:
+      - lunchbot_network
+
+  # Service Backend
+  lunchbot_be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spring_lunchbot_prod
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      lunchbot_db:
+        condition: service_healthy
+    networks:
+      - lunchbot_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  lunchbot_network:
+    driver: bridge
+
+volumes:
+  mysql_data_prod:
+    driver: local
