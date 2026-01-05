@@ -16,7 +16,7 @@ services:
       MYSQL_COLLATION: utf8mb4_unicode_ci
       TZ: Asia/Ho_Chi_Minh
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data_prod:/var/lib/mysql
     healthcheck:
