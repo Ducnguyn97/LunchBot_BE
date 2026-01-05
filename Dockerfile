@@ -26,5 +26,6 @@ EXPOSE 8080
 # Set timezone
 ENV TZ=Asia/Ho_Chi_Minh
 
+
 # Run application
 ENTRYPOINT ["java", "-jar", "app.jar"]

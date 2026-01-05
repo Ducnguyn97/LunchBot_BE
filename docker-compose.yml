@@ -4,6 +4,8 @@ services:
     image: mysql:8.0
     container_name: mysql_lunchbot
     restart: unless-stopped
+    env_file:
+      - .env.docker
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -13,7 +15,7 @@ services:
       MYSQL_DATABASE: lunchbot_db
       TZ: Asia/Ho_Chi_Minh
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -33,6 +35,8 @@ services:
       dockerfile: Dockerfile
     container_name: spring_lunchbot
     restart: unless-stopped
+    env_file:
+      - .env.docker
     ports:
       - "8080:8080"
     environment:
