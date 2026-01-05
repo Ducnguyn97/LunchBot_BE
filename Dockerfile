@@ -1,48 +1,30 @@
-# ============================
-# Stage 1: Build với Maven
-# ============================
-FROM maven:3.9-eclipse-temurin-17 AS builder
-WORKDIR /build
-
-# Copy pom.xml trước để cache dependencies
-COPY pom.xml .
-
-# Download dependencies
-RUN mvn dependency:go-offline -B
-
-# Copy source code
-COPY src ./src
-
-# Build application (skip tests)
-RUN mvn clean package -DskipTests
-
-# ============================
-# Stage 2: Runtime - ĐỔI SANG DEBIAN thay vì Alpine
-# ============================
-FROM eclipse-temurin:17-jre
-
+# Stage 1: Build
+FROM maven:3.9.6-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Cài đặt fonts tiếng Việt cho Debian/Ubuntu
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    fonts-dejavu \
-    fonts-dejavu-extra \
-    fonts-liberation \
-    fonts-noto \
-    fontconfig \
-    && fc-cache -f -v \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Copy pom.xml and download dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
-# Set locale UTF-8
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
+# Copy source code and build
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# Copy JAR từ build stage
-COPY --from=builder /build/target/LunchBot_BE-0.0.1-SNAPSHOT.jar app.jar
+# Stage 2: Run
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+# Copy jar from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose port
 EXPOSE 8080
 
-# Force UTF-8 encoding
-ENTRYPOINT ["java", "-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8", "-jar", "app.jar"]
+# Set timezone
+ENV TZ=Asia/Ho_Chi_Minh
+
+# Run application
+ENTRYPOINT ["java", "-jar", "app.jar"]
