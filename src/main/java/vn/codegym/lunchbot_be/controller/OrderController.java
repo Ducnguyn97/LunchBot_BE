@@ -1,8 +1,10 @@
 package vn.codegym.lunchbot_be.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
@@ -46,10 +48,12 @@ public class OrderController {
      * Lấy thông tin trang thanh toán
      */
     @GetMapping("/checkout")
-    public ResponseEntity<?> getCheckoutInfo() {
+    public ResponseEntity<?> getCheckoutInfo(
+            @RequestParam(required = false) List<Long> dishIds
+    ) {
         try {
             String email = getCurrentUserEmail();
-            CheckoutResponse response = orderService.getCheckoutInfo(email);
+            CheckoutResponse response = orderService.getCheckoutInfo(email, dishIds);
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -69,7 +73,10 @@ public class OrderController {
      * Body: { "couponCode": "SUMMER2023" }
      */
     @PostMapping("/checkout/apply-coupon")
-    public ResponseEntity<?> applyCoupon(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> applyCoupon(
+            @RequestParam(required = false) List<Long> dishIds, // ✅ Thêm param
+            @RequestBody Map<String, String> request
+    ) {
         try {
             String email = getCurrentUserEmail();
             String couponCode = request.get("couponCode");
@@ -79,7 +86,7 @@ public class OrderController {
                         .body(Map.of("error", "Vui lòng nhập mã giảm giá"));
             }
 
-            CheckoutResponse response = orderService.applyDiscount(email, couponCode);
+            CheckoutResponse response = orderService.applyDiscount(email, couponCode, dishIds);
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

@@ -9,11 +9,13 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.codegym.lunchbot_be.dto.request.CheckoutRequest;
+import vn.codegym.lunchbot_be.dto.request.SepayWebhookDTO;
 import vn.codegym.lunchbot_be.dto.response.*;
 import vn.codegym.lunchbot_be.exception.ResourceNotFoundException;
 import vn.codegym.lunchbot_be.model.*;
 import vn.codegym.lunchbot_be.model.enums.CancelledBy;
 import vn.codegym.lunchbot_be.model.enums.OrderStatus;
+import vn.codegym.lunchbot_be.model.enums.PaymentMethod;
 import vn.codegym.lunchbot_be.model.enums.PaymentStatus;
 import vn.codegym.lunchbot_be.repository.*;
 import vn.codegym.lunchbot_be.service.CheckoutService;
@@ -28,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,19 +47,21 @@ public class OrderServiceImpl implements OrderService {
     private final ShippingPartnerRepository shippingPartnerRepository;
     private final ShippingServiceImpl shippingService;
     private final OrderNotificationService orderNotificationService;
+    private final RefundServiceImpl refundService;
 
 
     @Override
     @Transactional(readOnly = true)
-    public CheckoutResponse getCheckoutInfo(String email) {
-        return checkoutService.getCheckoutInfo(email);
+    public CheckoutResponse getCheckoutInfo(String email, List<Long> selectedDishIds) {
+        return checkoutService.getCheckoutInfo(email, selectedDishIds);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CheckoutResponse applyDiscount(String email, String couponCode) {
-        return checkoutService.applyDiscount(email, couponCode);
+    public CheckoutResponse applyDiscount(String email, String couponCode, List<Long> selectedDishIds) {
+        return checkoutService.applyDiscount(email, couponCode, selectedDishIds);
     }
+
     @Override
     @Transactional
     public OrderResponse createOrder(String email, CheckoutRequest request) {
@@ -116,7 +121,14 @@ public class OrderServiceImpl implements OrderService {
 
         // 5. Tính toán giá
         BigDecimal itemsTotal = itemsToOrder.stream()
-                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .map(item -> {
+                    BigDecimal discountPrice = item.getDish().getDiscountPrice() != null
+                            ? item.getDish().getDiscountPrice()
+                            : item.getPrice(); // Nếu không có discount thì lấy giá gốc
+
+                    // Tính tổng tiền cho item này
+                    return discountPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
+                })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal serviceFee = checkoutService.calculateServiceFee(itemsTotal);
@@ -204,14 +216,18 @@ public class OrderServiceImpl implements OrderService {
             Dish dish = cartItem.getDish();
             String firstImage = extractFirstImageUrl(dish.getImagesUrls());
 
+            BigDecimal unitPrice = dish.getDiscountPrice() != null
+                    ? dish.getDiscountPrice()
+                    : cartItem.getPrice();
+
             OrderItem orderItem = OrderItem.builder()
                     .order(order)
                     .dishId(dish.getId())
                     .dishName(dish.getName())
                     .dishImage(firstImage)
                     .quantity(cartItem.getQuantity())
-                    .unitPrice(cartItem.getPrice())
-                    .totalPrice(cartItem.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())))
+                    .unitPrice(unitPrice)
+                    .totalPrice(unitPrice.multiply(BigDecimal.valueOf(cartItem.getQuantity())))
                     .merchantId(merchant.getId())
                     .merchantName(merchant.getRestaurantName())
                     .build();
@@ -234,12 +250,25 @@ public class OrderServiceImpl implements OrderService {
             System.err.println("❌ Failed to send notification: " + e.getMessage());
         }
 
-        // 14. Xóa các món đã đặt khỏi giỏ hàng
-        for (CartItem item : itemsToOrder) {
-            cart.getCartItems().remove(item);
-        }
-        cartRepository.save(cart);
+        try {
+            // Lấy lại cart để đảm bảo có dữ liệu mới nhất
+            Cart freshCart = cartRepository.findByUserId(user.getId())
+                    .orElseThrow(() -> new RuntimeException("Giỏ hàng không tồn tại"));
 
+            // Lọc lại items cần xóa dựa trên dishIds
+            List<CartItem> itemsToRemove = freshCart.getCartItems().stream()
+                    .filter(item -> request.getDishIds().contains(item.getDish().getId()))
+                    .collect(Collectors.toList());
+
+            if (!itemsToRemove.isEmpty()) {
+                freshCart.getCartItems().removeAll(itemsToRemove);
+                cartRepository.save(freshCart);
+                log.info("✅ Removed {} items from cart for order #{}", itemsToRemove.size(), savedOrder.getId());
+            }
+        } catch (Exception e) {
+            log.error("❌ Failed to remove items from cart: {}", e.getMessage());
+            // Không throw exception vì order đã tạo thành công
+        }
         return mapToOrderResponse(savedOrder);
     }
 
@@ -273,10 +302,6 @@ public class OrderServiceImpl implements OrderService {
         return mapToOrderResponse(order);
     }
 
-
-
-
-
     @Override
     @Transactional
     public OrderResponse cancelOrder(String email, Long orderId, String reason) {
@@ -295,11 +320,33 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("Đơn hàng này không thể hủy");
         }
 
-        OrderStatus oldStatus = order.getStatus();
+        // ✅ FIX: Refresh order từ database để lấy dữ liệu mới nhất
+        orderRepository.flush();
+        order = orderRepository.findById(orderId).orElse(order);
 
-        // Cập nhật trạng thái
+        log.info("📋 Order refreshed - Payment Status: {}, Payment Method: {}, Transaction Ref: {}",
+                order.getPaymentStatus(), order.getPaymentMethod(), order.getVnpayTransactionRef());
+
+        OrderStatus oldStatus = order.getStatus();
+        PaymentStatus oldPaymentStatus = order.getPaymentStatus();
+
+        // ✅ FIX: Force PAID status nếu có transaction ref (webhook đã process)
+        // Lý do: Status có thể bị corrupted thành FAILED, nhưng vnpayTransactionRef là đáng tin cậy hơn
+        boolean hasTransactionRef = order.getVnpayTransactionRef() != null &&
+                !order.getVnpayTransactionRef().trim().isEmpty();
+
+        if (hasTransactionRef && order.getPaymentStatus() != PaymentStatus.PAID) {
+            log.warn("⚠️ Order has transaction ref but status is {}. Forcing PAID...", order.getPaymentStatus());
+            order.setPaymentStatus(PaymentStatus.PAID);
+            orderRepository.save(order);
+            log.info("✅ Payment status forced to PAID");
+        }
+
+        // Cập nhật trạng thái đơn hàng
         order.updateStatus(OrderStatus.CANCELLED);
         order.setCancellationReason(reason);
+        order.setCancelledBy(CancelledBy.CUSTOMER);
+        order.setCancelledAt(LocalDateTime.now());
 
         // Hoàn lại usedCount cho coupon (nếu có)
         if (order.getCoupon() != null) {
@@ -308,13 +355,51 @@ public class OrderServiceImpl implements OrderService {
             couponRepository.save(coupon);
         }
 
+        // ✅ Kiểm tra cách khác - dùng vnpayTransactionRef thay vì paymentStatus
+        boolean isCardPayment = order.getPaymentMethod() == PaymentMethod.CARD;
+
+        log.info("💳 Refund check - hasTransactionRef: {}, isCardPayment: {}",
+                hasTransactionRef, isCardPayment);
+
+        // ✅ Tạo hoàn tiền nếu:
+        // 1. Thanh toán bằng CARD
+        // 2. Có transaction ref (tức là đã thanh toán)
+        if (isCardPayment && hasTransactionRef) {
+            log.info("💰 Creating refund request for cancelled order: {}", order.getOrderNumber());
+
+            try {
+                RefundRequest refundRequest = refundService.createRefundRequest(order, reason);
+
+                if (refundRequest != null) {
+                    log.info("✅ Refund request created successfully - ID: {}", refundRequest.getId());
+                } else {
+                    log.warn("⚠️ Refund request not created (order not eligible for refund)");
+                }
+            } catch (Exception e) {
+                log.error("❌ Failed to create refund request: ", e);
+                // ✅ Không throw exception - chỉ log warning
+            }
+        } else {
+            log.info("ℹ️ No refund needed:");
+            if (!isCardPayment) {
+                log.info("   - Payment method: {} (not CARD)", order.getPaymentMethod());
+            }
+            if (!hasTransactionRef) {
+                log.info("   - No transaction ref found (payment not completed)");
+            }
+        }
+
         Order cancelledOrder = orderRepository.save(order);
 
         try {
-            orderNotificationService.notifyOrderStatusChanged(cancelledOrder, oldStatus, OrderStatus.CANCELLED);
-            System.out.println("✅ Sent cancellation notification for order #" + cancelledOrder.getId());
+            orderNotificationService.notifyOrderStatusChanged(
+                    cancelledOrder,
+                    oldStatus,
+                    OrderStatus.CANCELLED
+            );
+            log.info("✅ Sent cancellation notification for order #{}", cancelledOrder.getId());
         } catch (Exception e) {
-            System.err.println("❌ Failed to send notification: " + e.getMessage());
+            log.error("❌ Failed to send notification: ", e.getMessage());
         }
 
         return mapToOrderResponse(cancelledOrder);
@@ -348,25 +433,81 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("Bạn không có quyền cập nhật đơn hàng này");
         }
 
+        // ✅ FIX: Refresh order để lấy dữ liệu mới nhất
+        orderRepository.flush();
+        order = orderRepository.findById(orderId).orElse(order);
+
+        log.info("📋 Order refreshed for status update - Payment Status: {}, Transaction Ref: {}",
+                order.getPaymentStatus(), order.getVnpayTransactionRef());
+
         // 2. Validate trạng thái
         validateStatusTransition(order.getStatus(), newStatus);
 
         OrderStatus oldStatus = order.getStatus();
+        PaymentStatus oldPaymentStatus = order.getPaymentStatus();
 
-        // 3. ✅ XỬ LÝ ĐẶC BIỆT KHI MERCHANT HỦY ĐƠN
+        // 3. Xử lý khi merchant hủy đơn
         if (newStatus == OrderStatus.CANCELLED) {
             if (cancelReason == null || cancelReason.trim().isEmpty()) {
                 throw new RuntimeException("Vui lòng cung cấp lý do hủy đơn");
             }
+
             order.setCancelledBy(CancelledBy.MERCHANT);
             order.setCancellationReason(cancelReason);
             order.setCancelledAt(LocalDateTime.now());
 
-            // ✅ Hoàn lại coupon nếu có
+            // Hoàn lại coupon nếu có
             if (order.getCoupon() != null) {
                 Coupon coupon = order.getCoupon();
                 coupon.setUsedCount(coupon.getUsedCount() - 1);
                 couponRepository.save(coupon);
+            }
+
+            // ✅ FIX: Force PAID status nếu có transaction ref
+            boolean hasTransactionRef = order.getVnpayTransactionRef() != null &&
+                    !order.getVnpayTransactionRef().trim().isEmpty();
+
+            if (hasTransactionRef && order.getPaymentStatus() != PaymentStatus.PAID) {
+                log.warn("⚠️ [MERCHANT] Order has transaction ref but status is {}. Forcing PAID...",
+                        order.getPaymentStatus());
+                order.setPaymentStatus(PaymentStatus.PAID);
+                orderRepository.save(order);
+                log.info("✅ Payment status forced to PAID");
+            }
+
+            // ✅ Kiểm tra cách khác - dùng vnpayTransactionRef
+            boolean isCardPayment = order.getPaymentMethod() == PaymentMethod.CARD;
+
+            log.info("💳 [MERCHANT CANCEL] Refund check - hasTransactionRef: {}, isCardPayment: {}",
+                    hasTransactionRef, isCardPayment);
+
+            // ✅ Tạo hoàn tiền nếu:
+            // 1. Thanh toán bằng CARD
+            // 2. Có transaction ref (tức là đã thanh toán)
+            if (isCardPayment && hasTransactionRef) {
+                log.info("💰 [MERCHANT CANCEL] Creating refund request for order: {}",
+                        order.getOrderNumber());
+
+                try {
+                    RefundRequest refundRequest = refundService.createRefundRequest(order, cancelReason);
+
+                    if (refundRequest != null) {
+                        log.info("✅ Refund request created successfully - ID: {}", refundRequest.getId());
+                    } else {
+                        log.warn("⚠️ Refund request not created (order not eligible for refund)");
+                    }
+                } catch (Exception e) {
+                    log.error("❌ Failed to create refund request: ", e);
+                    // Không throw exception - chỉ log warning
+                }
+            } else {
+                log.info("ℹ️ No refund needed:");
+                if (!isCardPayment) {
+                    log.info("   - Payment method: {} (not CARD)", order.getPaymentMethod());
+                }
+                if (!hasTransactionRef) {
+                    log.info("   - No transaction ref found (payment not completed)");
+                }
             }
         }
 
@@ -625,6 +766,64 @@ public class OrderServiceImpl implements OrderService {
                 .totalDiscountGiven(totalDiscount)
                 .orders(orderResponses)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void processSepayPayment(SepayWebhookDTO webhookData) {
+        // 1. Trích xuất mã giao dịch (txnRef) từ nội dung chuyển khoản
+        // Ví dụ SePay gửi: "THANHTOAN SPY1735622221" -> Cần lấy "SPY1735622221"
+        String content = webhookData.getTransferContent();
+        if (content == null || !content.contains("SPY")) {
+            log.error("Nội dung chuyển khoản không hợp lệ: {}", content);
+            return;
+        }
+
+        String txnRef = content.substring(content.indexOf("SPY")).trim();
+        log.info("Đang xử lý thanh toán cho mã tham chiếu: {}", txnRef);
+
+        // 2. Tìm đơn hàng chờ trong database (Dựa trên vnpayTransactionRef hoặc một trường map tương đương)
+        Optional<Order> orderOpt = orderRepository.findByVnpayTransactionRef(txnRef);
+
+        if (orderOpt.isPresent()) {
+            Order order = orderOpt.get();
+
+            // Kiểm tra nếu đơn hàng đã thanh toán rồi thì bỏ qua (Idempotency)
+            if (order.getPaymentStatus() == PaymentStatus.PAID) {
+                log.warn("Đơn hàng {} đã được thanh toán trước đó.", txnRef);
+                return;
+            }
+
+            // 3. Kiểm tra số tiền (Quan trọng để tránh gian lận)
+            BigDecimal expectedAmount = order.getTotalAmount();
+            if (webhookData.getTransferAmount().compareTo(expectedAmount) < 0) {
+                log.error("Số tiền thanh toán không đủ! Nhận: {}, Cần: {}",
+                        webhookData.getTransferAmount(), expectedAmount);
+                return;
+            }
+
+            // 4. Cập nhật trạng thái đơn hàng
+            order.setPaymentStatus(PaymentStatus.PAID);
+            order.setStatus(OrderStatus.CONFIRMED); // Chuyển sang trạng thái đã xác nhận
+            orderRepository.save(order);
+
+            log.info("Thanh toán thành công cho đơn hàng: {}", order.getOrderNumber());
+        } else {
+            log.error("Không tìm thấy đơn hàng với mã tham chiếu: {}", txnRef);
+        }
+    }
+
+    // Helper: Tách số từ chuỗi
+    private Long extractOrderIdFromContent(String content) {
+        try {
+            // Regex tìm chuỗi số đầu tiên trong nội dung
+            // Ví dụ: "DH123" -> lấy 123
+            String numberOnly = content.replaceAll("[^0-9]", "");
+            if (numberOnly.isEmpty()) return null;
+            return Long.parseLong(numberOnly);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
 

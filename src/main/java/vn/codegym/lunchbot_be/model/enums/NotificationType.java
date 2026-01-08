@@ -22,6 +22,10 @@ public enum NotificationType {
     PROMOTION_NEW,          // Khuyến mãi mới
     PROMOTION_EXPIRING,     // Khuyến mãi sắp hết hạn
 
+    PARTNER_REQUEST,    // Thông báo cho admin về yêu cầu đối tác mới
+    PARTNER_APPROVED,   // Thông báo cho merchant khi được duyệt
+    PARTNER_REJECTED,   // Thông báo cho merchant khi bị từ chối
+
     // Thông báo hệ thống
     SYSTEM_ANNOUNCEMENT,    // Thông báo hệ thống
     SYSTEM_MAINTENANCE,     // Bảo trì hệ thống
@@ -33,4 +37,12 @@ public enum NotificationType {
     RECONCILIATION_REQUEST_APPROVED,   // Admin approve
     RECONCILIATION_REQUEST_REJECTED,   // Admin reject
     RECONCILIATION_CLAIM_SUBMITTED,    // Merchant báo cáo sai sót
+
+    // Refund notifications - ✅ MỚI THÊM
+    REFUND_REQUESTED,      // Admin nhận thông báo có yêu cầu hoàn tiền mới
+    REFUND_PROCESSING,     // User nhận thông báo đang xử lý
+    REFUND_COMPLETED,      // User/Admin nhận thông báo hoàn tiền thành công
+    REFUND_FAILED,         // User/Admin nhận thông báo hoàn tiền thất bại
+    REFUND_CANCELLED,      // User nhận thông báo yêu cầu bị hủy
+
 }

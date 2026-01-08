@@ -1,0 +1,96 @@
+services:
+  # Service Database
+  lunchbot_db:
+    image: mysql:8.0
+    container_name: mysql_lunchbot
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: lunchbot_db
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - lunchbot_network
+
+  # Service Backend
+  lunchbot_be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spring_lunchbot
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    ports:
+      - "8080:8080"
+    environment:
+      # Database
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+      # Mail
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+
+      # App
+      APP_NAME: ${APP_NAME}
+      APP_URL: ${APP_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_URL: ${BACKEND_URL}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_SUPPORT: ${MAIL_SUPPORT}
+
+      # GHN
+      GHN_API_TOKEN: ${GHN_API_TOKEN}
+      GHN_DISTRICT_ID: ${GHN_DISTRICT_ID}
+      GHN_SHOP_ID: ${GHN_SHOP_ID}
+
+      # SEPAY
+      SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER}
+      SEPAY_ACCOUNT_NAME: ${SEPAY_ACCOUNT_NAME}
+      SEPAY_BANK_BIN: ${SEPAY_BANK_BIN}
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN}
+      SEPAY_ACCOUNT_ID: ${SEPAY_ACCOUNT_ID}
+      SEPAY_WEBHOOK_URL: ${SEPAY_WEBHOOK_URL}
+
+      TZ: Asia/Ho_Chi_Minh
+    depends_on:
+      lunchbot_db:
+        condition: service_healthy
+    networks:
+      - lunchbot_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  lunchbot_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
